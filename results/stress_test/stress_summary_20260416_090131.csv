@@ -1,0 +1,2 @@
+﻿concurrency,total_requests,success_count,fail_count,success_rate,avg_time_s,median_time_s,p95_time_s,p99_time_s,min_time_s,max_time_s,throughput_req_per_s,total_time_s,stable
+30,30,7,23,23.3,57.71,61.83,83.37,83.37,19.14,92.78,0.023,300.06,False

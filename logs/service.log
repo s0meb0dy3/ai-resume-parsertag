@@ -1,0 +1,7 @@
+INFO:     Started server process [36983]
+INFO:     Waiting for application startup.
+2026-04-28 09:06:06 | INFO  | uploads 清理完成，删除 154 个过期文件
+INFO:     Application startup complete.
+ERROR:    [Errno 48] error while attempting to bind on address ('0.0.0.0', 21801): address already in use
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
