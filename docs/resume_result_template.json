@@ -1,0 +1,204 @@
+{
+  "_comment": [
+    "AIHR 简历解析打标 — 完整输出模版（v3）",
+    "positiveTags.tagsArray 维度固定顺序 : education → companyBg → workYears → skills → industry",
+    "education allowedValues  : C9 | 985 | 211 | 双一流 | 海外名校(QS50) | 海外名校(QS100) | 海外硕士 | 博士 | 硕士 | 本科 | 专科及以下",
+    "companyBg allowedValues  : 头部大厂 | 腰部中厂 | 外企500强 | 一线外企 | 独角兽 | 明星创业 | 国企/央企 | 传统企业转型",
+    "workYears allowedValues  : 应届 | 2-3年 | 3-5年 | 5-10年 | 10-15年 | 15年+",
+    "industry  allowedValues  : 互联网/电商 | 金融科技 | 企业服务/SaaS | 游戏 | 在线教育 | 医疗健康 | 人工智能 | 汽车/出行 | 物联网/硬件 | 物流/供应链",
+    "confidence 出现维度       : companyBg | skills | industry（education / workYears 不含）",
+    "negativeTags dimension   : jobstable=职业稳定性风险 | integrity=诚信与合规风险 | matchRisk=匹配度硬伤 | location=地域相关"
+  ],
+
+  "taskId": "e39d009b-abd7-42f4-8e64-46b7e26e4b20",
+  "resumeParseFinishTime": "2026-05-19 11:40:56",
+  "tagParseFinishTime": "2026-05-19 11:41:04",
+
+  "candidate": {
+    "name": "张三",
+    "phone": "13800138000",
+    "email": "zhangsan@example.com",
+    "gender": 1,
+    "age": 28,
+    "address": "广东省深圳市南山区",
+    "nativePlace": "湖南长沙",
+    "selfEvaluation": "具备多年后端开发经验，擅长微服务架构，学习能力强",
+    "expectedSalary": "25-35K",
+    "expectedPosition": "后端高级开发工程师"
+  },
+
+  "educations": [
+    {
+      "school": "上海交通大学",
+      "major": "计算机科学与技术",
+      "degree": "硕士",
+      "education": "硕士研究生",
+      "startDate": "2017-09",
+      "endDate": "2020-07"
+    },
+    {
+      "school": "华南理工大学",
+      "major": "软件工程",
+      "degree": "学士",
+      "education": "本科",
+      "startDate": "2013-09",
+      "endDate": "2017-07"
+    }
+  ],
+
+  "works": [
+    {
+      "company": "字节跳动",
+      "position": "高级后端工程师",
+      "description": "负责推荐系统后端服务开发，主导微服务拆分与性能优化，QPS 提升 3 倍；参与 Feed 流系统架构设计，保障日均亿级请求稳定运行",
+      "startDate": "2022-03",
+      "endDate": "至今"
+    },
+    {
+      "company": "美团",
+      "position": "后端工程师",
+      "description": "负责外卖履约系统开发，优化数据库索引，接口响应时间降低 40%；参与分布式事务方案落地",
+      "startDate": "2020-08",
+      "endDate": "2022-02"
+    }
+  ],
+
+  "projects": [
+    {
+      "company": "字节跳动",
+      "projectName": "实时推荐引擎重构",
+      "role": "技术负责人",
+      "description": "主导推荐引擎从单体架构向微服务架构的迁移，引入 Kafka 实现异步解耦，Redis 集群缓存热点数据，系统吞吐量提升 200%",
+      "startDate": "2023-01",
+      "endDate": "2023-09"
+    },
+    {
+      "company": "美团",
+      "projectName": "履约调度系统优化",
+      "role": "核心开发",
+      "description": "重构骑手调度算法，引入优先级队列和超时熔断机制，峰值订单处理能力从 5 万/分钟提升至 15 万/分钟",
+      "startDate": "2021-03",
+      "endDate": "2021-11"
+    }
+  ],
+
+  "positiveTags": {
+    "tagsArray": [
+      {
+        "dimension": "education",
+        "displayName": "学历背景",
+        "value": [
+          { "tag": "985",   "source": "ai" },
+          { "tag": "211",   "source": "ai" },
+          { "tag": "双一流","source": "ai" },
+          { "tag": "硕士",  "source": "ai" }
+        ]
+      },
+      {
+        "dimension": "companyBg",
+        "displayName": "公司背景",
+        "confidence": 0.95,
+        "value": [
+          { "tag": "头部大厂", "source": "ai" },
+          { "tag": "腰部中厂", "source": "ai" }
+        ]
+      },
+      {
+        "dimension": "workYears",
+        "displayName": "工作年限",
+        "value": [
+          { "tag": "3-5年", "source": "ai" }
+        ]
+      },
+      {
+        "dimension": "skills",
+        "displayName": "技能",
+        "confidence": 0.92,
+        "value": [
+          { "tag": "Java",        "source": "ai" },
+          { "tag": "Spring Boot", "source": "ai" },
+          { "tag": "Spring Cloud","source": "ai" },
+          { "tag": "MySQL",       "source": "ai" },
+          { "tag": "Redis",       "source": "ai" },
+          { "tag": "Kafka",       "source": "ai" }
+        ]
+      },
+      {
+        "dimension": "industry",
+        "displayName": "行业",
+        "confidence": 0.92,
+        "value": [
+          { "tag": "互联网/电商", "source": "ai" },
+          { "tag": "人工智能",   "source": "ai" }
+        ]
+      }
+    ]
+  },
+
+  "negativeTags": {
+    "hitCount": 4,
+    "deductionScore": -70,
+    "tagsArray": [
+      {
+        "dimension": "jobstable",
+        "displayName": "职业稳定性风险",
+        "value": [
+          {
+            "tag": "频繁跳槽",
+            "severity": "medium",
+            "matchedContent": "近3年内4段工作经历：A公司, B公司, C公司, D公司",
+            "source": "ai"
+          },
+          {
+            "tag": "最近任职时长偏短",
+            "severity": "medium",
+            "matchedContent": "XX科技有限公司 2024-01~2024-03，仅2个月",
+            "source": "ai"
+          },
+          {
+            "tag": "工作空窗期过长",
+            "severity": "low",
+            "matchedContent": "A公司 离职后至 B公司 入职，空窗约8个月",
+            "source": "ai"
+          }
+        ]
+      },
+      {
+        "dimension": "integrity",
+        "displayName": "诚信与合规风险",
+        "value": [
+          {
+            "tag": "工作时间线重叠",
+            "severity": "high",
+            "matchedContent": "A公司(2020-01~2022-06) 与 B公司(2022-03~2023-12) 时间重叠3个月",
+            "source": "ai"
+          }
+        ]
+      },
+      {
+        "dimension": "matchRisk",
+        "displayName": "匹配度硬伤",
+        "value": [
+          {
+            "tag": "疑似培训机构背景",
+            "severity": "medium",
+            "matchedContent": "教育经历中包含：XX编程训练营",
+            "source": "ai"
+          }
+        ]
+      },
+      {
+        "dimension": "location",
+        "displayName": "地域相关",
+        "value": [
+          {
+            "tag": "湖南娄底",
+            "severity": "high",
+            "matchedContent": "籍贯：湖南娄底",
+            "source": "ai"
+          }
+        ]
+      }
+    ]
+  }
+}

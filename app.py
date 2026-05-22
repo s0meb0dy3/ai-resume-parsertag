@@ -10,6 +10,7 @@ import os
 import io
 import base64
 import json
+import importlib
 import time
 import uuid
 import asyncio
@@ -18,15 +19,18 @@ import logging.handlers
 import json_repair
 import requests
 import fitz
+from dataclasses import dataclass, field
 from PIL import Image
 from datetime import datetime
 from pathlib import Path
+from typing import Optional, List
 from openai import OpenAI
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from tagger import run_tagging
 
 # ── 配置 ────────────────────────────────────────────────────────
 MODEL_SERVICE_URL = os.getenv("MODEL_SERVICE_URL", "http://10.2.5.7:13001/v1")
@@ -45,10 +49,12 @@ MAX_RETRIES         = int(os.getenv("MAX_RETRIES", "2"))
 _BASE_DIR       = Path(__file__).parent          # 脚本所在目录，不受启动路径影响
 LOG_DIR         = Path(os.getenv("LOG_DIR",    str(_BASE_DIR / "logs")))
 UPLOAD_DIR      = Path(os.getenv("UPLOAD_DIR", str(_BASE_DIR / "uploads")))
+RESULT_DIR      = Path(os.getenv("RESULT_DIR", str(_BASE_DIR / "results")))
 LOG_KEEP_DAYS   = int(os.getenv("LOG_KEEP_DAYS", "7"))    # 保留天数
 LOG_MAX_MB      = int(os.getenv("LOG_MAX_MB",    "50"))   # 单文件最大 MB
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+RESULT_DIR.mkdir(parents=True, exist_ok=True)
 
 # ── 日志配置 ────────────────────────────────────────────────────
 _log_fmt = logging.Formatter(
@@ -663,10 +669,200 @@ def _log_result(result: dict, filename: str, elapsed: float):
             for line in p["description"].splitlines():
                 logger.info(f"│    {line}")
 
-    logger.info(f"├{'─'*20} 完整 JSON {'─'*21}")
+    logger.info(f"├{'─'*20} 完整简历 JSON {'─'*17}")
     for line in json.dumps(result, ensure_ascii=False, indent=2).splitlines():
         logger.info(f"│  {line}")
     logger.info(f"└{SEP}")
+
+
+def _log_tag_info(task_id: str, filename: str, tag_info: dict,
+                  resume_parse_time: str, tag_elapsed: float, total_elapsed: float):
+    """将打标结果完整打印到日志"""
+    SEP = "─" * 60
+    positive_tags = tag_info.get("positiveTags", [])
+    hit_tags      = tag_info.get("hitTags", [])
+    severity_icon = {"low": "[低]", "medium": "[中]", "high": "[高]"}
+
+    logger.info(f"┌{SEP}")
+    logger.info(f"│ 打标结果  文件: {filename}  taskId: {task_id}")
+    logger.info(f"│ 简历解析: {resume_parse_time}  打标耗时: {tag_elapsed:.1f}s  全程: {total_elapsed:.1f}s")
+
+    logger.info(f"├{'─'*20} 正向标签({len(positive_tags)}) {'─'*16}")
+    for tag in positive_tags:
+        dim = tag.get("dimension", "")
+        # 数组型维度读取 {dim}ValueArray，标量型读取 value
+        array_key = f"{dim}ValueArray"
+        if array_key in tag:
+            val = ", ".join(tag[array_key]) if tag[array_key] else ""
+        else:
+            raw_val = tag.get("value", "")
+            val = raw_val if isinstance(raw_val, str) else ", ".join(raw_val)
+        conf = f"  置信度={tag['confidence']:.2f}" if tag.get("confidence") is not None else ""
+        logger.info(f"│  [{dim:12s}] {val}{conf}")
+    logger.info(f"│  整体置信度: {tag_info.get('confidence', 0):.2f}")
+
+    total_hits = sum(len(g.get("hits", [])) for g in hit_tags)
+    logger.info(f"├{'─'*20} 风险标签({total_hits}) {'─'*17}")
+    if hit_tags:
+        for group in hit_tags:
+            for hit in group.get("hits", []):
+                icon = severity_icon.get(hit["severity"], "[?]")
+                logger.info(f"│  {icon} [{group['category']}] {hit['tag']}")
+                logger.info(f"│     证据: {hit['matchedContent'][:100]}")
+        logger.info(f"│  合计扣分: {tag_info.get('deductionScore', 0)}")
+    else:
+        logger.info("│  无风险标签命中")
+
+    logger.info(f"│  标签打标时间: {tag_info.get('tagParseTime', '')}")
+    logger.info(f"└{SEP}")
+
+
+def _conform_to_template(task_id: str, resume: dict, tag_info: dict, resume_parse_time: str) -> dict:
+    """
+    按模版严格序列化最终输出，与 docs/resume_result_template.json (v3) 完全一致。
+    顶层字段: taskId, resumeParseFinishTime, tagParseFinishTime,
+              candidate, educations, works, projects, positiveTags, negativeTags
+    positiveTags.tagsArray 每项: {dimension, displayName, [confidence], value:[{tag,source}]}
+    negativeTags: {hitCount, deductionScore, tagsArray:[{dimension,displayName,value:[{tag,severity,matchedContent,source}]}]}
+    confidence 出现维度: companyBg | skills | industry（education / workYears 不含）
+    """
+    from tag_data import classify_education
+    from tag_config import POSITIVE_DIMENSIONS, NEGATIVE_DIMENSIONS
+
+    _POSITIVE_DISPLAY = {d["dimension"]: d["displayName"] for d in POSITIVE_DIMENSIONS}
+    _NO_CONF_DIM = {"education", "workYears"}
+
+    _NEGATIVE_DIM = {d["displayName"]: (d["dimension"], d["displayName"]) for d in NEGATIVE_DIMENSIONS}
+
+    c = resume.get("candidate") or {}
+    candidate = {
+        "name":             c.get("name", ""),
+        "phone":            c.get("phone", ""),
+        "email":            c.get("email", ""),
+        "gender":           c.get("gender", 0),
+        "age":              c.get("age", 0),
+        "address":          c.get("address", ""),
+        "nativePlace":      c.get("nativePlace", ""),
+        "selfEvaluation":   c.get("selfEvaluation", ""),
+        "expectedSalary":   c.get("expectedSalary", ""),
+        "expectedPosition": c.get("expectedPosition", ""),
+    }
+
+    def _edu(e):
+        return {
+            "school":    e.get("school", ""),
+            "major":     e.get("major", ""),
+            "degree":    e.get("degree", ""),
+            "education": e.get("education", ""),
+            "startDate": e.get("startDate", ""),
+            "endDate":   e.get("endDate", ""),
+        }
+
+    def _work(w):
+        return {
+            "company":     w.get("company", ""),
+            "position":    w.get("position", ""),
+            "description": w.get("description", ""),
+            "startDate":   w.get("startDate", ""),
+            "endDate":     w.get("endDate", ""),
+        }
+
+    def _proj(p):
+        return {
+            "company":     p.get("company", ""),
+            "projectName": p.get("projectName", ""),
+            "role":        p.get("role", ""),
+            "description": p.get("description", ""),
+            "startDate":   p.get("startDate", ""),
+            "endDate":     p.get("endDate", ""),
+        }
+
+    # ── positiveTags.tagsArray ───────────────────────────────────────
+    overall_conf = round(tag_info.get("confidence", 0), 2)
+    tags_array = []
+    edu_entry = None
+    source_default = "ai"
+
+    for tag in tag_info.get("positiveTags", []):
+        dim     = tag.get("dimension", "")
+        arr_key = f"{dim}ValueArray"
+        values  = tag.get(arr_key, [])
+        src     = tag.get("source", source_default)
+
+        entry: dict = {
+            "dimension":   dim,
+            "displayName": _POSITIVE_DISPLAY.get(dim, dim),
+        }
+        if dim not in _NO_CONF_DIM:
+            # companyBg / skills / industry：使用 LLM 给出的置信度，缺省用整体置信度
+            entry["confidence"] = tag["confidence"] if tag.get("confidence") is not None else overall_conf
+        entry["value"] = [{"tag": v, "source": src} for v in values]
+        tags_array.append(entry)
+        if dim == "education":
+            edu_entry = entry
+
+    # ── education QS 等级补全 ────────────────────────────────────────
+    if edu_entry is not None:
+        schools  = [e.get("school", "") for e in resume.get("educations", [])]
+        degrees  = [e.get("education", "") for e in resume.get("educations", [])]
+        rule_edu = classify_education(schools, degrees)
+        existing = {v["tag"] for v in edu_entry["value"]}
+        for v in rule_edu:
+            if v not in existing:
+                edu_entry["value"].append({"tag": v, "source": "rule"})
+
+    # ── negativeTags.tagsArray ───────────────────────────────────────
+    neg_array = []
+    for group in tag_info.get("hitTags", []):
+        category = group.get("category", "")
+        dim_code, display = _NEGATIVE_DIM.get(category, (category, category))
+        neg_array.append({
+            "dimension":   dim_code,
+            "displayName": display,
+            "value": [
+                {
+                    "tag":            h.get("tag", ""),
+                    "severity":       h.get("severity", ""),
+                    "matchedContent": h.get("matchedContent", ""),
+                    "source":         "ai",
+                }
+                for h in group.get("hits", [])
+            ],
+        })
+
+    tag_parse_time = tag_info.get("tagParseTime", "")
+
+    return {
+        "taskId":               task_id,
+        "resumeParseFinishTime": resume_parse_time,
+        "tagParseFinishTime":   tag_parse_time,
+        "candidate":  candidate,
+        "educations": [_edu(e) for e in resume.get("educations", [])],
+        "works":      [_work(w) for w in resume.get("works", [])],
+        "projects":   [_proj(p) for p in resume.get("projects", [])],
+        "positiveTags": {
+            "tagsArray": tags_array,
+        },
+        "negativeTags": {
+            "hitCount":      tag_info.get("hitCount", 0),
+            "deductionScore": tag_info.get("deductionScore", 0),
+            "tagsArray":     neg_array,
+        },
+    }
+
+
+def _save_result(task_id: str, filename: str, result: dict):
+    """将最终完整结果（简历 + tagInfo）保存为 JSON 文件到 RESULT_DIR"""
+    stem = Path(filename).stem[:40]  # 文件名前40字符，避免路径过长
+    safe_stem = "".join(c if c.isalnum() or c in "-_." else "_" for c in stem)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_path = RESULT_DIR / f"{ts}_{safe_stem}_{task_id[:8]}.json"
+    try:
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(result, f, ensure_ascii=False, indent=2)
+        logger.info(f"结果已保存: {out_path.name}")
+    except Exception as e:
+        logger.warning(f"结果保存失败: {e}")
 
 
 def _parse_with_logging(source, filename: str = "unknown.pdf") -> dict:
@@ -696,7 +892,9 @@ def _cleanup_uploads(max_age_hours: int = 24 * 15):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _cleanup_uploads()   # 启动时清理一次过期文件
+    cleanup_task = asyncio.create_task(_periodic_cleanup())
     yield
+    cleanup_task.cancel()
     executor.shutdown(wait=False)
 
 
@@ -716,6 +914,52 @@ async def health_check():
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 
+@app.get("/api/tags/config")
+async def get_tags_config():
+    """
+    动态获取标签配置（热更新）。
+    每次调用都重新加载 tag_config.py，无需重启服务即可反映配置变更。
+    """
+    import tag_config as _tc
+    importlib.reload(_tc)
+
+    # 正向标签维度
+    positive = [
+        {
+            "dimension":     d["dimension"],
+            "displayName":   d["displayName"],
+            "enabled":       d["enabled"],
+            "allowedValues": d["allowedValues"],
+        }
+        for d in _tc.POSITIVE_DIMENSIONS
+    ]
+
+    # 负向标签维度：从 rules 中展开每条规则为 tag 列表
+    negative = []
+    for d in _tc.NEGATIVE_DIMENSIONS:
+        tags = [
+            {
+                "tagName":  rule.get("tagName", rule_key),
+                "severity": rule.get("severity", ""),
+                "enabled":  rule.get("enabled", True),
+            }
+            for rule_key, rule in d.get("rules", {}).items()
+        ]
+        negative.append({
+            "dimension":   d["dimension"],
+            "displayName": d["displayName"],
+            "enabled":     d["enabled"],
+            "tags":        tags,
+        })
+
+    return JSONResponse(content={
+        "positiveDimensions": positive,
+        "negativeDimensions": negative,
+        "severityDeduction":  _tc.SEVERITY_DEDUCTION,
+        "reloadedAt":         datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    })
+
+
 @app.get("/v1/models")
 async def list_models():
     return {
@@ -731,6 +975,12 @@ async def list_models():
                 "id": "DeepSeek-OCR-JSON",
                 "object": "model",
                 "created": 1698957206,
+                "owned_by": "user"
+            },
+            {
+                "id": "AIHR-Resume",
+                "object": "model",
+                "created": 1748000000,
                 "owned_by": "user"
             }
         ]
@@ -764,15 +1014,12 @@ async def create_chat_completion(request: dict):
         else:
             contents = [{"type": "text", "text": str(contents)}]
 
-    # 提取 PDF 并解析 — 阻塞调用卸载到线程池，释放事件循环
-    if model in ("DeepSeek-OCR", "DeepSeek-OCR-JSON"):
+    # ── DeepSeek-OCR：仅解析，不打标（兼容旧调用）─────────────────
+    if model == "DeepSeek-OCR":
         source, filename = get_pdf_source_from_content(contents)
         if source is None:
-            return JSONResponse(
-                status_code=400,
-                content={"error": "无法从请求中获取 PDF，请检查 content.type 字段"}
-            )
-
+            return JSONResponse(status_code=400,
+                content={"error": "无法从请求中获取 PDF，请检查 content.type 字段"})
         t2 = time.time()
         try:
             result = await asyncio.get_running_loop().run_in_executor(
@@ -780,13 +1027,96 @@ async def create_chat_completion(request: dict):
             )
         except Exception as e:
             logger.error(f"PDF 解析失败: {e}")
-            return JSONResponse(
-                status_code=400,
-                content={"error": f"PDF 解析失败: {str(e)}"}
-            )
+            return JSONResponse(status_code=400, content={"error": f"PDF 解析失败: {str(e)}"})
         generated_text = json.dumps(result, ensure_ascii=False, indent=2)
         all_text_content = [generated_text]
         logger.info(f"{model} | {len(generated_text)} chars | {time.time() - t2:.2f}s")
+
+    # ── DeepSeek-OCR-JSON：解析 + 打标，复用 _run_parse_and_tag 流水线 ──
+    elif model == "DeepSeek-OCR-JSON":
+        source, filename = get_pdf_source_from_content(contents)
+        if source is None:
+            return JSONResponse(status_code=400,
+                content={"error": "无法从请求中获取 PDF，请检查 content.type 字段"})
+
+        task_id = str(uuid.uuid4())
+        job_info = {
+            "jobTitle":          request.get("jobTitle", "") or "",
+            "requiredSkills":    request.get("requiredSkills", "") or "",
+            "jobDescription":    request.get("jobDescription", "") or "",
+            "jobSensitiveWords": request.get("jobSensitiveWords", "") or "",
+        }
+        rec = TaskRecord(task_id=task_id)
+        async with _task_lock:
+            _task_store[task_id] = rec
+
+        async_mode = request.get("async_mode", False)
+        if async_mode:
+            # 异步模式：立即返回 taskId，通过 GET /api/resume/async/result 轮询
+            asyncio.create_task(
+                _run_parse_and_tag(task_id, source, filename or "resume.pdf", job_info)
+            )
+            generated_text = json.dumps(
+                {"taskId": task_id, "status": 0, "statusDesc": "待处理", "estimatedSeconds": 90},
+                ensure_ascii=False,
+            )
+            logger.info(f"{model} async_mode=true taskId={task_id}")
+        else:
+            # 同步模式：等待完整流水线（parse+tag），返回 v3 格式 JSON
+            await _run_parse_and_tag(task_id, source, filename or "resume.pdf", job_info)
+            async with _task_lock:
+                rec = _task_store.get(task_id)
+            if rec and rec.status == 3:
+                generated_text = json.dumps(rec.result, ensure_ascii=False, indent=2)
+                logger.info(f"{model} sync taskId={task_id} | {len(generated_text)} chars")
+            elif rec and rec.status == 4:
+                return JSONResponse(status_code=400,
+                    content={"error": rec.error_msg or "处理失败"})
+            else:
+                generated_text = "{}"
+        all_text_content = [generated_text]
+
+    # ── AIHR-Resume：OpenAI 兼容适配层，按 action 分发到内部业务接口 ──
+    elif model == "AIHR-Resume":
+        # 从原始 messages 取 content（不使用经过上方预处理的 contents）
+        raw = messages[-1].get("content", "") if messages else ""
+        if isinstance(raw, list):
+            raw = next(
+                (item.get("text", "") for item in raw
+                 if isinstance(item, dict) and item.get("type") == "text"),
+                ""
+            )
+        try:
+            params = json_repair.loads(raw) if isinstance(raw, str) and raw.strip() else {}
+            if not isinstance(params, dict):
+                params = {}
+        except Exception:
+            params = {}
+
+        action = params.get("action", "")
+        logger.info(f"[AIHR-Resume] action={action!r}")
+
+        if action == "submit_batch":
+            resp = await async_batch_parse(params)
+            result_data = json.loads(resp.body)
+        elif action == "get_result":
+            resp = await get_async_result(params.get("taskId", ""))
+            result_data = json.loads(resp.body)
+        elif action == "list_tasks":
+            resp = await list_tasks(status=params.get("status"))
+            result_data = json.loads(resp.body)
+        elif action == "get_tags_config":
+            resp = await get_tags_config()
+            result_data = json.loads(resp.body)
+        else:
+            result_data = {
+                "code": 1001,
+                "msg": f"未知 action: {action!r}，可选: submit_batch / get_result / list_tasks / get_tags_config"
+            }
+
+        generated_text = json.dumps(result_data, ensure_ascii=False, indent=2)
+        all_text_content = [generated_text]
+
     else:
         all_text_content = [""]
         generated_text = ""
@@ -926,6 +1256,373 @@ async def batch_parse_resumes(request: dict):
             "results": results,
         },
     )
+
+
+# ── 异步任务基础设施 ────────────────────────────────────────────
+
+TASK_TTL_MINUTES = int(os.getenv("TASK_TTL_MINUTES", "10"))
+
+_STATUS_DESC = {
+    0: "待处理",
+    1: "简历解析中",
+    2: "标签打标中",
+    3: "任务完成",
+    4: "任务失败",
+}
+
+ALLOWED_EXTENSIONS = {".pdf", ".doc", ".docx", ".jpg", ".jpeg", ".png"}
+MAX_FILE_SIZE_MB    = int(os.getenv("MAX_FILE_SIZE_MB", "20"))
+
+
+@dataclass
+class TaskRecord:
+    task_id:           str
+    status:            int = 0
+    created_at:        float = field(default_factory=time.time)
+    completed_at:      Optional[float] = None
+    result:            Optional[dict] = None
+    error_msg:         Optional[str] = None
+    estimated_seconds: int = 90
+
+
+_task_store: dict[str, TaskRecord] = {}
+_task_lock = asyncio.Lock()
+
+
+async def _set_task_field(task_id: str, **kwargs):
+    async with _task_lock:
+        rec = _task_store.get(task_id)
+        if rec:
+            for k, v in kwargs.items():
+                setattr(rec, k, v)
+
+
+def _cleanup_task_store():
+    cutoff = time.time() - TASK_TTL_MINUTES * 60
+    expired = [tid for tid, t in list(_task_store.items()) if t.created_at < cutoff]
+    for tid in expired:
+        _task_store.pop(tid, None)
+    if expired:
+        logger.info(f"task_store 清理 {len(expired)} 条过期任务")
+
+
+async def _periodic_cleanup():
+    while True:
+        await asyncio.sleep(60)
+        _cleanup_task_store()
+
+
+async def _run_parse_and_tag(task_id: str, source, filename: str, job_info: dict):
+    """两阶段异步流水线：阶段一解析 → 阶段二打标
+    source 可为 bytes（multipart 上传）、本地路径 str、HTTP URL str 或 base64 bytes，
+    与 /api/resume/async/parse 和 /v1/chat/completions 共用同一条流水线。
+    """
+    loop = asyncio.get_running_loop()
+    pipeline_start = time.time()
+    try:
+        # 阶段一：简历解析
+        await _set_task_field(task_id, status=1)
+        resume_start = time.time()
+
+        resume = await loop.run_in_executor(
+            executor, _parse_with_logging, source, filename
+        )
+        resume_parse_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        phase1_elapsed = time.time() - resume_start
+        logger.info(f"[{task_id}] 阶段一完成，耗时 {phase1_elapsed:.1f}s")
+
+        # 阶段二：正向标签 + 敏感词检测（并行）
+        await _set_task_field(task_id, status=2)
+        tag_start = time.time()
+
+        def _do_tagging():
+            return run_tagging(resume, job_info, llm_call_fn=_llm_call)
+
+        tag_info = await loop.run_in_executor(executor, _do_tagging)
+        tag_elapsed = time.time() - tag_start
+        total_elapsed = time.time() - pipeline_start
+
+        # 打标日志（完整结构化输出）
+        _log_tag_info(task_id, filename, tag_info, resume_parse_time, tag_elapsed, total_elapsed)
+
+        # 按模版严格序列化最终输出
+        result = _conform_to_template(task_id, resume, tag_info, resume_parse_time)
+
+        # 完整结果 JSON 写入日志
+        SEP = "─" * 60
+        logger.info(f"┌{SEP}")
+        logger.info(f"│ 完整输出 JSON  文件: {filename}  taskId: {task_id}")
+        for line in json.dumps(result, ensure_ascii=False, indent=2).splitlines():
+            logger.info(f"│  {line}")
+        logger.info(f"└{SEP}")
+
+        # 持久化到 results/ 目录
+        _save_result(task_id, filename, result)
+
+        await _set_task_field(task_id, status=3, result=result, completed_at=time.time())
+
+    except Exception as e:
+        logger.error(f"[{task_id}] 任务失败: {e}")
+        await _set_task_field(task_id, status=4, error_msg=str(e), completed_at=time.time())
+
+
+# ── 异步对外接口 ────────────────────────────────────────────────
+
+@app.post("/api/resume/async/parse")
+async def async_parse_resume(
+    file: UploadFile = File(...),
+    requestId: Optional[str] = Form(None),
+    jobTitle: Optional[str] = Form(None),
+    requiredSkills: Optional[str] = Form(None),
+    jobDescription: Optional[str] = Form(None),
+    jobSensitiveWords: Optional[str] = Form(None),
+):
+    """上传简历，触发异步解析+打标，立即返回 taskId"""
+    # 防重复提交
+    if requestId:
+        async with _task_lock:
+            for rec in _task_store.values():
+                if getattr(rec, "request_id", None) == requestId:
+                    return JSONResponse(content={
+                        "code": 0, "msg": "success",
+                        "data": {"taskId": rec.task_id, "status": rec.status, "estimatedSeconds": rec.estimated_seconds}
+                    })
+
+    # 文件格式校验
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in ALLOWED_EXTENSIONS:
+        return JSONResponse(content={"code": 1001, "msg": f"文件格式不支持: {suffix}"})
+
+    file_bytes = await file.read()
+
+    # 文件大小校验
+    if len(file_bytes) > MAX_FILE_SIZE_MB * 1024 * 1024:
+        return JSONResponse(content={"code": 1002, "msg": f"文件大小超限（最大 {MAX_FILE_SIZE_MB}MB）"})
+
+    # 仅支持 PDF（当前解析链路）
+    if suffix != ".pdf":
+        return JSONResponse(content={"code": 1001, "msg": "当前仅支持 PDF 格式"})
+
+    task_id = str(uuid.uuid4())
+    rec = TaskRecord(task_id=task_id)
+    if requestId:
+        rec.request_id = requestId  # type: ignore[attr-defined]
+
+    async with _task_lock:
+        _task_store[task_id] = rec
+
+    job_info = {
+        "jobTitle":          jobTitle or "",
+        "requiredSkills":    requiredSkills or "",
+        "jobDescription":    jobDescription or "",
+        "jobSensitiveWords": jobSensitiveWords or "",
+    }
+
+    asyncio.create_task(_run_parse_and_tag(task_id, file_bytes, file.filename or "resume.pdf", job_info))
+
+    logger.info(f"[{task_id}] 任务入队 file={file.filename} jobTitle={jobTitle}")
+
+    return JSONResponse(content={
+        "code": 0, "msg": "success",
+        "data": {"taskId": task_id, "status": 0, "estimatedSeconds": 90}
+    })
+
+
+@app.get("/api/resume/async/result")
+async def get_async_result(taskId: str):
+    """查询任务状态，完成后返回完整解析+打标结果"""
+    async with _task_lock:
+        rec = _task_store.get(taskId)
+
+    if rec is None:
+        return JSONResponse(content={
+            "code": 2001,
+            "msg": "taskId 不存在或已过期（TTL 10min）",
+            "data": None
+        })
+
+    elapsed = round(time.time() - rec.created_at, 1)
+    data: dict = {
+        "taskId":           taskId,
+        "status":           rec.status,
+        "statusDesc":       _STATUS_DESC.get(rec.status, "未知"),
+        "elapsedSeconds":   elapsed,
+        "estimatedSeconds": rec.estimated_seconds,
+    }
+
+    if rec.status == 3:
+        data["result"] = rec.result
+    elif rec.status == 4:
+        data["errorMsg"] = rec.error_msg
+
+    return JSONResponse(content={"code": 0, "msg": "success", "data": data})
+
+
+@app.post("/api/resume/async/batch")
+async def async_batch_parse(request: dict):
+    """
+    批量异步提交简历（JSON body），仅支持 type=url（从 MinIO / HTTP 下载）。
+    立即返回每份文件的 taskId，通过 GET /api/resume/async/result 轮询结果。
+    单次上限 20 份，后台并发执行。
+
+    请求体：
+    {
+      "resumes": [
+        {"type": "url", "file": {"name": "a.pdf", "path": "http://192.168.12.185:9000/resumes/a.pdf"}},
+        ...
+      ],
+      "jobTitle": "岗位名称",
+      "requiredSkills": "技能1,技能2"
+    }
+    """
+    resumes_raw = request.get("resumes", [])
+
+    if not resumes_raw:
+        return JSONResponse(content={"code": 1001, "msg": "resumes 数组不能为空"})
+    if not isinstance(resumes_raw, list):
+        return JSONResponse(content={"code": 1001, "msg": "resumes 必须是数组"})
+    for item in resumes_raw:
+        if not isinstance(item, dict) or item.get("type") != "url":
+            t = item.get("type") if isinstance(item, dict) else type(item).__name__
+            return JSONResponse(content={"code": 1001,
+                "msg": f"resumes 仅支持 type=url，不支持: {t}"})
+    if len(resumes_raw) > 20:
+        return JSONResponse(content={"code": 1003,
+            "msg": f"共 {len(resumes_raw)} 份，单次最多提交 20 份"})
+
+    job_info = {
+        "jobTitle":          request.get("jobTitle", "") or "",
+        "requiredSkills":    request.get("requiredSkills", "") or "",
+        "jobDescription":    request.get("jobDescription", "") or "",
+        "jobSensitiveWords": request.get("jobSensitiveWords", "") or "",
+    }
+
+    loop = asyncio.get_running_loop()
+    tasks = []
+
+    for item in resumes_raw:
+        file_meta = item.get("file", {})
+        filename  = file_meta.get("name", "resume.pdf")
+
+        try:
+            source, fn = await loop.run_in_executor(
+                executor, get_pdf_source_from_content, [item]
+            )
+        except Exception as e:
+            tasks.append({"filename": filename, "code": 1001,
+                          "msg": f"文件下载失败: {str(e)}", "taskId": None})
+            continue
+
+        if source is None:
+            tasks.append({"filename": filename, "code": 1001,
+                          "msg": "无法下载 PDF，请检查 URL 是否可访问", "taskId": None})
+            continue
+
+        task_id = str(uuid.uuid4())
+        async with _task_lock:
+            _task_store[task_id] = TaskRecord(task_id=task_id)
+
+        asyncio.create_task(_run_parse_and_tag(task_id, source, fn or filename, job_info))
+        logger.info(f"[batch] 任务入队 taskId={task_id} file={fn or filename} type=url")
+        tasks.append({"filename": fn or filename, "code": 0,
+                      "taskId": task_id, "status": 0, "statusDesc": "待处理"})
+
+    submitted = sum(1 for t in tasks if t["code"] == 0)
+    return JSONResponse(content={
+        "code":      0,
+        "msg":       "success",
+        "total":     len(resumes_raw),
+        "submitted": submitted,
+        "failed":    len(resumes_raw) - submitted,
+        "estimatedSeconds": 90,
+        "tasks":     tasks,
+    })
+
+
+@app.get("/api/tasks")
+async def list_tasks(status: Optional[int] = None):
+    """
+    查询内存中全部任务的状态摘要。
+    ?status=0/1/2/3/4  按状态过滤（不传则返回全部）
+    结果按创建时间倒序排列，最多返回 200 条（TTL 10min 内）。
+    """
+    async with _task_lock:
+        snapshot = list(_task_store.items())
+
+    now = time.time()
+    result = []
+    for task_id, rec in sorted(snapshot, key=lambda x: x[1].created_at, reverse=True):
+        if status is not None and rec.status != status:
+            continue
+
+        item: dict = {
+            "taskId":         task_id,
+            "status":         rec.status,
+            "statusDesc":     _STATUS_DESC.get(rec.status, "未知"),
+            "elapsedSeconds": round(now - rec.created_at, 1),
+            "createdAt":      datetime.fromtimestamp(rec.created_at).strftime("%Y-%m-%d %H:%M:%S"),
+        }
+
+        if rec.status == 3 and rec.result:
+            c = rec.result.get("candidate", {})
+            item["candidateName"]    = c.get("name", "")
+            item["resumeParseTime"]  = rec.result.get("resumeParseFinishTime", "")
+            item["tagParseTime"]     = rec.result.get("tagParseFinishTime", "")
+            item["completedAt"]      = (
+                datetime.fromtimestamp(rec.completed_at).strftime("%Y-%m-%d %H:%M:%S")
+                if rec.completed_at else ""
+            )
+        elif rec.status == 4:
+            item["errorMsg"] = rec.error_msg
+
+        result.append(item)
+
+    return JSONResponse(content={
+        "total":  len(result),
+        "tasks":  result,
+    })
+
+
+# ── 算法侧内部接口（供 Java 后端编排调用）──────────────────────
+
+@app.post("/algorithm/resume/parse")
+async def algorithm_parse(request: dict):
+    """内部接口：同步解析简历，返回结构化 JSON（供 Java 后端调用）"""
+    source, filename = get_pdf_source_from_content(request.get("content", []))
+    if source is None:
+        return JSONResponse(status_code=400, content={"error": "无法获取 PDF"})
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(executor, _parse_with_logging, source, filename or "resume.pdf")
+    return JSONResponse(content=result)
+
+
+@app.post("/algorithm/positive-tag/extract")
+async def algorithm_positive_tag(request: dict):
+    """内部接口：从结构化简历提取正向标签"""
+    from tagger import extract_positive_tags_llm
+    resume = request.get("resume", {})
+    job_info = request.get("jobInfo", {})
+    if not resume:
+        return JSONResponse(status_code=400, content={"error": "缺少 resume 字段"})
+
+    loop = asyncio.get_running_loop()
+    result = await loop.run_in_executor(
+        executor,
+        lambda: extract_positive_tags_llm(resume, job_info, _llm_call)
+    )
+    return JSONResponse(content=result)
+
+
+@app.post("/algorithm/sensitive-tag/detect")
+async def algorithm_sensitive_tag(request: dict):
+    """内部接口：敏感词/风险检测"""
+    from tagger import detect_sensitive_tags
+    resume = request.get("resume", {})
+    job_info = request.get("jobInfo", {})
+    if not resume:
+        return JSONResponse(status_code=400, content={"error": "缺少 resume 字段"})
+    result = detect_sensitive_tags(resume, job_info)
+    return JSONResponse(content=result)
 
 
 if __name__ == "__main__":
