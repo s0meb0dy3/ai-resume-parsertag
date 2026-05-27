@@ -1,0 +1,118 @@
+stages:
+  - build
+  - deploy
+
+variables:
+  IMAGE_NAME: aihr-ocr
+  IMAGE_TAG: $CI_COMMIT_SHORT_SHA
+  NAMESPACE: demo
+
+# ── Build ──────────────────────────────────────────────
+build:
+  stage: build
+  image: docker:24
+  services:
+    - name: docker:24-dind
+      alias: docker
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  before_script:
+    - docker info
+  script:
+    - echo "Building image $IMAGE_NAME:$IMAGE_TAG"
+    - docker build -t $IMAGE_NAME:$IMAGE_TAG -t $IMAGE_NAME:latest .
+    - docker images | grep $IMAGE_NAME
+  tags:
+    - docker
+  only:
+    - dev
+    - main
+
+# ── Deploy ─────────────────────────────────────────────
+deploy:
+  stage: deploy
+  image: bitnami/kubectl:latest
+  before_script:
+    - mkdir -p ~/.kube
+    - |
+      cat > ~/.kube/config << EOF
+      apiVersion: v1
+      kind: Config
+      clusters:
+      - cluster:
+          certificate-authority-data: ${KUBE_CA}
+          server: ${KUBE_URL}
+        name: local
+      contexts:
+      - context:
+          cluster: local
+          user: gitlab
+        name: ci
+      current-context: ci
+      users:
+      - name: gitlab
+        user:
+          token: ${KUBE_TOKEN}
+      EOF
+    - kubectl version --client
+    - kubectl get nodes
+  script:
+    - |
+      kubectl apply -n $NAMESPACE -f - << EOF
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: aihr-ocr
+        labels:
+          app: aihr-ocr
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: aihr-ocr
+        template:
+          metadata:
+            labels:
+              app: aihr-ocr
+          spec:
+            containers:
+            - name: aihr-ocr
+              image: ${IMAGE_NAME}:${IMAGE_TAG}
+              imagePullPolicy: Never
+              ports:
+              - containerPort: 21804
+              env:
+              - name: MODEL_SERVICE_URL
+                value: "${MODEL_SERVICE_URL}"
+              - name: SERVICE_PORT
+                value: "21804"
+              resources:
+                requests:
+                  memory: "256Mi"
+                  cpu: "100m"
+                limits:
+                  memory: "512Mi"
+                  cpu: "500m"
+      ---
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: aihr-ocr
+      spec:
+        selector:
+          app: aihr-ocr
+        ports:
+        - port: 21804
+          targetPort: 21804
+          nodePort: 30804
+        type: NodePort
+      EOF
+    - kubectl rollout status deployment/aihr-ocr -n $NAMESPACE --timeout=120s
+    - echo "部署完成，访问地址：http://localhost:30804"
+    - kubectl get pods -n $NAMESPACE -l app=aihr-ocr
+  tags:
+    - docker
+  only:
+    - dev
+    - main
