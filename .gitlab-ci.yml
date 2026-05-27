@@ -6,21 +6,15 @@ variables:
   IMAGE_NAME: aihr-ocr
   IMAGE_TAG: $CI_COMMIT_SHORT_SHA
   NAMESPACE: demo
+  DOCKER_HOST: unix:///var/run/docker.sock
 
 # ── Build ──────────────────────────────────────────────
 build:
   stage: build
   image: docker:24
-  services:
-    - name: docker:24-dind
-      alias: docker
-  variables:
-    DOCKER_HOST: tcp://docker:2375
-    DOCKER_TLS_CERTDIR: ""
-  before_script:
-    - docker info
   script:
-    - echo "Building image $IMAGE_NAME:$IMAGE_TAG"
+    - docker info
+    - echo "Building $IMAGE_NAME:$IMAGE_TAG"
     - docker build -t $IMAGE_NAME:$IMAGE_TAG -t $IMAGE_NAME:latest .
     - docker images | grep $IMAGE_NAME
   tags:
@@ -55,7 +49,6 @@ deploy:
         user:
           token: ${KUBE_TOKEN}
       EOF
-    - kubectl version --client
     - kubectl get nodes
   script:
     - |
@@ -64,8 +57,6 @@ deploy:
       kind: Deployment
       metadata:
         name: aihr-ocr
-        labels:
-          app: aihr-ocr
       spec:
         replicas: 1
         selector:
@@ -109,8 +100,8 @@ deploy:
         type: NodePort
       EOF
     - kubectl rollout status deployment/aihr-ocr -n $NAMESPACE --timeout=120s
-    - echo "部署完成，访问地址：http://localhost:30804"
     - kubectl get pods -n $NAMESPACE -l app=aihr-ocr
+    - echo "服务地址：http://localhost:30804"
   tags:
     - docker
   only:
