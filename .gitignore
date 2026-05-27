@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# 环境
+.env
+.env.*
+venv/
+.venv/
+
+# 运行时产生的文件
+logs/
+uploads/
+results/
+
+# 测试 PDF 文件
+test_full/
+*.pdf
+
+# macOS
+.DS_Store
+.AppleDouble
+
+# IDE
+.idea/
+.vscode/
+*.swp

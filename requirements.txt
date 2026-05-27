@@ -7,3 +7,5 @@ pillow==10.4.0
 json-repair==0.29.3
 python-dotenv==1.0.1
 requests==2.32.3
+python-dateutil>=2.9.0
+python-multipart>=0.0.9

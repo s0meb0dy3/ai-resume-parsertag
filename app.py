@@ -16,6 +16,7 @@ import uuid
 import asyncio
 import logging
 import logging.handlers
+import copy
 import json_repair
 import requests
 import fitz
@@ -30,7 +31,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
-from tagger import run_tagging
+from tag.tagger import run_tagging
 
 # ── 配置 ────────────────────────────────────────────────────────
 MODEL_SERVICE_URL = os.getenv("MODEL_SERVICE_URL", "http://10.2.5.7:13001/v1")
@@ -55,6 +56,7 @@ LOG_MAX_MB      = int(os.getenv("LOG_MAX_MB",    "50"))   # 单文件最大 MB
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 RESULT_DIR.mkdir(parents=True, exist_ok=True)
+_RUNTIME_CFG_FILE = _BASE_DIR / "tag_config_runtime.json"
 
 # ── 日志配置 ────────────────────────────────────────────────────
 _log_fmt = logging.Formatter(
@@ -726,8 +728,8 @@ def _conform_to_template(task_id: str, resume: dict, tag_info: dict, resume_pars
     negativeTags: {hitCount, deductionScore, tagsArray:[{dimension,displayName,value:[{tag,severity,matchedContent,source}]}]}
     confidence 出现维度: companyBg | skills | industry（education / workYears 不含）
     """
-    from tag_data import classify_education
-    from tag_config import POSITIVE_DIMENSIONS, NEGATIVE_DIMENSIONS
+    from tag.tag_data import classify_education
+    from tag.tag_config import POSITIVE_DIMENSIONS, NEGATIVE_DIMENSIONS
 
     _POSITIVE_DISPLAY = {d["dimension"]: d["displayName"] for d in POSITIVE_DIMENSIONS}
     _NO_CONF_DIM = {"education", "workYears"}
@@ -914,50 +916,212 @@ async def health_check():
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
 
 
+# ── 标签配置 CRUD 辅助函数 ─────────────────────────────────────────
+
+def _cfg_load() -> dict:
+    """加载运行时配置：优先 JSON 文件，回退到 tag_config.py 默认值。"""
+    if _RUNTIME_CFG_FILE.exists():
+        with open(_RUNTIME_CFG_FILE, encoding="utf-8") as f:
+            return json.load(f)
+    from tag import tag_config as _tc
+    importlib.reload(_tc)
+    return {
+        "positiveDimensions": copy.deepcopy(_tc.POSITIVE_DIMENSIONS),
+        "negativeDimensions": copy.deepcopy(_tc.NEGATIVE_DIMENSIONS),
+        "severityDeduction":  dict(_tc.SEVERITY_DEDUCTION),
+    }
+
+def _cfg_save(cfg: dict):
+    """原子写入配置文件（tmp → rename）。"""
+    tmp = _RUNTIME_CFG_FILE.with_suffix(".tmp")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, ensure_ascii=False, indent=2)
+    tmp.replace(_RUNTIME_CFG_FILE)
+
+def _cfg_response(cfg: dict) -> JSONResponse:
+    """统一返回格式，附加 updatedAt。"""
+    return JSONResponse(content={
+        "code": 0,
+        "msg":  "success",
+        "data": {
+            **cfg,
+            "updatedAt": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        },
+    })
+
+
+# ── GET /api/tags/config ──────────────────────────────────────────
+
 @app.get("/api/tags/config")
 async def get_tags_config():
-    """
-    动态获取标签配置（热更新）。
-    每次调用都重新加载 tag_config.py，无需重启服务即可反映配置变更。
-    """
-    import tag_config as _tc
-    importlib.reload(_tc)
+    """查询完整标签配置（含正向维度、负向维度、扣分权重）。"""
+    async with _cfg_lock:
+        cfg = _cfg_load()
+    return _cfg_response(cfg)
 
-    # 正向标签维度
-    positive = [
-        {
-            "dimension":     d["dimension"],
-            "displayName":   d["displayName"],
-            "enabled":       d["enabled"],
-            "allowedValues": d["allowedValues"],
-        }
-        for d in _tc.POSITIVE_DIMENSIONS
-    ]
 
-    # 负向标签维度：从 rules 中展开每条规则为 tag 列表
-    negative = []
-    for d in _tc.NEGATIVE_DIMENSIONS:
-        tags = [
-            {
-                "tagName":  rule.get("tagName", rule_key),
-                "severity": rule.get("severity", ""),
-                "enabled":  rule.get("enabled", True),
-            }
-            for rule_key, rule in d.get("rules", {}).items()
-        ]
-        negative.append({
-            "dimension":   d["dimension"],
-            "displayName": d["displayName"],
-            "enabled":     d["enabled"],
-            "tags":        tags,
+# ── 正向维度 CRUD ──────────────────────────────────────────────────
+
+@app.post("/api/tags/config/positive")
+async def add_positive_dimension(body: dict):
+    """
+    新增正向标签维度。
+    Body: {"dimension":"newDim","displayName":"新维度","enabled":true,"allowedValues":[]}
+    """
+    dim = (body.get("dimension") or "").strip()
+    if not dim:
+        return JSONResponse(content={"code": 1001, "msg": "dimension 不能为空"})
+    async with _cfg_lock:
+        cfg = _cfg_load()
+        if any(d["dimension"] == dim for d in cfg["positiveDimensions"]):
+            return JSONResponse(content={"code": 1002, "msg": f"dimension '{dim}' 已存在"})
+        cfg["positiveDimensions"].append({
+            "dimension":     dim,
+            "displayName":   body.get("displayName", dim),
+            "enabled":       body.get("enabled", True),
+            "allowedValues": body.get("allowedValues", []),
         })
+        _cfg_save(cfg)
+    return _cfg_response(cfg)
 
-    return JSONResponse(content={
-        "positiveDimensions": positive,
-        "negativeDimensions": negative,
-        "severityDeduction":  _tc.SEVERITY_DEDUCTION,
-        "reloadedAt":         datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-    })
+
+@app.put("/api/tags/config/positive/{dimension}")
+async def update_positive_dimension(dimension: str, body: dict):
+    """
+    更新正向标签维度。
+    Body 字段均可选: {"displayName":"...","enabled":true,"allowedValues":["C9","985"]}
+    """
+    async with _cfg_lock:
+        cfg = _cfg_load()
+        target = next((d for d in cfg["positiveDimensions"] if d["dimension"] == dimension), None)
+        if target is None:
+            return JSONResponse(content={"code": 1004, "msg": f"dimension '{dimension}' 不存在"})
+        if "displayName"   in body: target["displayName"]   = body["displayName"]
+        if "enabled"       in body: target["enabled"]       = bool(body["enabled"])
+        if "allowedValues" in body: target["allowedValues"] = list(body["allowedValues"])
+        _cfg_save(cfg)
+    return _cfg_response(cfg)
+
+
+@app.delete("/api/tags/config/positive/{dimension}")
+async def delete_positive_dimension(dimension: str):
+    """删除正向标签维度。"""
+    async with _cfg_lock:
+        cfg = _cfg_load()
+        before = len(cfg["positiveDimensions"])
+        cfg["positiveDimensions"] = [d for d in cfg["positiveDimensions"] if d["dimension"] != dimension]
+        if len(cfg["positiveDimensions"]) == before:
+            return JSONResponse(content={"code": 1004, "msg": f"dimension '{dimension}' 不存在"})
+        _cfg_save(cfg)
+    return _cfg_response(cfg)
+
+
+# ── 负向维度 CRUD ──────────────────────────────────────────────────
+
+@app.put("/api/tags/config/negative/{dimension}")
+async def update_negative_dimension(dimension: str, body: dict):
+    """
+    更新负向维度元信息（displayName / enabled）。
+    Body 字段均可选: {"displayName":"...","enabled":true}
+    """
+    async with _cfg_lock:
+        cfg = _cfg_load()
+        target = next((d for d in cfg["negativeDimensions"] if d["dimension"] == dimension), None)
+        if target is None:
+            return JSONResponse(content={"code": 1004, "msg": f"dimension '{dimension}' 不存在"})
+        if "displayName" in body: target["displayName"] = body["displayName"]
+        if "enabled"     in body: target["enabled"]     = bool(body["enabled"])
+        _cfg_save(cfg)
+    return _cfg_response(cfg)
+
+
+@app.post("/api/tags/config/negative/{dimension}/rules")
+async def add_negative_rule(dimension: str, body: dict):
+    """
+    向负向维度新增一条规则。
+    Body: {"ruleKey":"new_rule","tagName":"规则名","enabled":true,"severity":"medium",...}
+    """
+    rule_key = (body.get("ruleKey") or "").strip()
+    if not rule_key:
+        return JSONResponse(content={"code": 1001, "msg": "ruleKey 不能为空"})
+    async with _cfg_lock:
+        cfg = _cfg_load()
+        dim = next((d for d in cfg["negativeDimensions"] if d["dimension"] == dimension), None)
+        if dim is None:
+            return JSONResponse(content={"code": 1004, "msg": f"dimension '{dimension}' 不存在"})
+        rules = dim.setdefault("rules", {})
+        if rule_key in rules:
+            return JSONResponse(content={"code": 1002, "msg": f"ruleKey '{rule_key}' 已存在"})
+        rule = {k: v for k, v in body.items() if k != "ruleKey"}
+        rule.setdefault("tagName",  rule_key)
+        rule.setdefault("enabled",  True)
+        rule.setdefault("severity", "medium")
+        rules[rule_key] = rule
+        _cfg_save(cfg)
+    return _cfg_response(cfg)
+
+
+@app.put("/api/tags/config/negative/{dimension}/rules/{rule_key}")
+async def update_negative_rule(dimension: str, rule_key: str, body: dict):
+    """
+    更新负向维度某条规则的参数。Body 字段均可选，只传需要改的字段。
+    示例: {"enabled":false,"threshold":5,"severity":"high"}
+    """
+    async with _cfg_lock:
+        cfg = _cfg_load()
+        dim = next((d for d in cfg["negativeDimensions"] if d["dimension"] == dimension), None)
+        if dim is None:
+            return JSONResponse(content={"code": 1004, "msg": f"dimension '{dimension}' 不存在"})
+        rules = dim.get("rules", {})
+        if rule_key not in rules:
+            return JSONResponse(content={"code": 1004, "msg": f"ruleKey '{rule_key}' 不存在"})
+        rules[rule_key].update({k: v for k, v in body.items() if k != "ruleKey"})
+        _cfg_save(cfg)
+    return _cfg_response(cfg)
+
+
+@app.delete("/api/tags/config/negative/{dimension}/rules/{rule_key}")
+async def delete_negative_rule(dimension: str, rule_key: str):
+    """删除负向维度某条规则。"""
+    async with _cfg_lock:
+        cfg = _cfg_load()
+        dim = next((d for d in cfg["negativeDimensions"] if d["dimension"] == dimension), None)
+        if dim is None:
+            return JSONResponse(content={"code": 1004, "msg": f"dimension '{dimension}' 不存在"})
+        if rule_key not in dim.get("rules", {}):
+            return JSONResponse(content={"code": 1004, "msg": f"ruleKey '{rule_key}' 不存在"})
+        del dim["rules"][rule_key]
+        _cfg_save(cfg)
+    return _cfg_response(cfg)
+
+
+# ── 扣分权重 & 重置 ───────────────────────────────────────────────
+
+@app.put("/api/tags/config/severity")
+async def update_severity(body: dict):
+    """
+    更新严重程度扣分权重。
+    Body: {"low":-5,"medium":-10,"high":-20}
+    """
+    allowed = {"low", "medium", "high"}
+    invalid = [k for k in body if k not in allowed]
+    if invalid:
+        return JSONResponse(content={"code": 1001, "msg": f"无效字段: {invalid}，仅支持 low/medium/high"})
+    async with _cfg_lock:
+        cfg = _cfg_load()
+        cfg["severityDeduction"].update({k: int(v) for k, v in body.items()})
+        _cfg_save(cfg)
+    return _cfg_response(cfg)
+
+
+@app.post("/api/tags/config/reset")
+async def reset_tags_config():
+    """重置为 tag_config.py 默认配置（删除运行时 JSON 覆盖文件）。"""
+    async with _cfg_lock:
+        if _RUNTIME_CFG_FILE.exists():
+            _RUNTIME_CFG_FILE.unlink()
+        cfg = _cfg_load()
+    return _cfg_response(cfg)
 
 
 @app.get("/v1/models")
@@ -994,9 +1158,29 @@ async def create_chat_completion(request: dict):
     messages = request.get("messages", [])
     contents = messages[-1].get("content", []) if messages else []
 
-    # 过滤探测消息，返回空响应而非 None（避免 FastAPI 产生 500）
-    if isinstance(contents, str) and "### Task" in contents:
-        return JSONResponse(status_code=200, content={"choices": [{"message": {"role": "assistant", "content": ""}}]})
+    # 无内容或纯文本探测：返回标准 OpenAI 格式，供渠道健康检测通过
+    def _is_probe(c) -> bool:
+        if not c:
+            return True
+        if isinstance(c, list) and len(c) == 0:
+            return True
+        if isinstance(c, str):
+            if "### Task" in c:
+                return True
+            parsed = json_repair.loads(c)
+            if isinstance(parsed, str):
+                return True
+        return False
+
+    if _is_probe(contents):
+        return JSONResponse(status_code=200, content={
+            "id": f"chatcmpl-{uuid.uuid4().hex[:8]}",
+            "object": "chat.completion",
+            "created": int(time.time()),
+            "model": model,
+            "choices": [{"index": 0, "message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}],
+            "usage": {"prompt_tokens": 0, "completion_tokens": 1, "total_tokens": 1},
+        })
 
     logger.info(f"请求 model={model}, type={contents[0].get('type') if isinstance(contents, list) else type(contents).__name__}")
 
@@ -1074,47 +1258,6 @@ async def create_chat_completion(request: dict):
                     content={"error": rec.error_msg or "处理失败"})
             else:
                 generated_text = "{}"
-        all_text_content = [generated_text]
-
-    # ── AIHR-Resume：OpenAI 兼容适配层，按 action 分发到内部业务接口 ──
-    elif model == "AIHR-Resume":
-        # 从原始 messages 取 content（不使用经过上方预处理的 contents）
-        raw = messages[-1].get("content", "") if messages else ""
-        if isinstance(raw, list):
-            raw = next(
-                (item.get("text", "") for item in raw
-                 if isinstance(item, dict) and item.get("type") == "text"),
-                ""
-            )
-        try:
-            params = json_repair.loads(raw) if isinstance(raw, str) and raw.strip() else {}
-            if not isinstance(params, dict):
-                params = {}
-        except Exception:
-            params = {}
-
-        action = params.get("action", "")
-        logger.info(f"[AIHR-Resume] action={action!r}")
-
-        if action == "submit_batch":
-            resp = await async_batch_parse(params)
-            result_data = json.loads(resp.body)
-        elif action == "get_result":
-            resp = await get_async_result(params.get("taskId", ""))
-            result_data = json.loads(resp.body)
-        elif action == "list_tasks":
-            resp = await list_tasks(status=params.get("status"))
-            result_data = json.loads(resp.body)
-        elif action == "get_tags_config":
-            resp = await get_tags_config()
-            result_data = json.loads(resp.body)
-        else:
-            result_data = {
-                "code": 1001,
-                "msg": f"未知 action: {action!r}，可选: submit_batch / get_result / list_tasks / get_tags_config"
-            }
-
-        generated_text = json.dumps(result_data, ensure_ascii=False, indent=2)
         all_text_content = [generated_text]
 
     else:
@@ -1238,7 +1381,8 @@ async def batch_parse_resumes(request: dict):
             content={"error": "单次最多处理 50 份简历"}
         )
 
-    # 整个阻塞处理过程卸载到线程池
+    # 整个阻塞处理过程卸载到
+    # 线程池
     results = await asyncio.get_running_loop().run_in_executor(
         executor, _batch_process, resume_items, max_concurrency,
     )
@@ -1283,10 +1427,12 @@ class TaskRecord:
     result:            Optional[dict] = None
     error_msg:         Optional[str] = None
     estimated_seconds: int = 90
+    extra:             Optional[str] = None
 
 
 _task_store: dict[str, TaskRecord] = {}
 _task_lock = asyncio.Lock()
+_cfg_lock  = asyncio.Lock()
 
 
 async def _set_task_field(task_id: str, **kwargs):
@@ -1348,18 +1494,37 @@ async def _run_parse_and_tag(task_id: str, source, filename: str, job_info: dict
         # 按模版严格序列化最终输出
         result = _conform_to_template(task_id, resume, tag_info, resume_parse_time)
 
-        # 完整结果 JSON 写入日志
+        # 读取 extra（透传字段）
+        async with _task_lock:
+            _rec = _task_store.get(task_id)
+        _extra = _rec.extra if _rec else None
+
+        # 构造与 GET /api/resume/async/result 完全一致的完整 API 响应并写入日志
+        completed_at = time.time()
+        full_api_response = {
+            "code": 0,
+            "msg": "success",
+            "data": {
+                "taskId":           task_id,
+                "status":           3,
+                "statusDesc":       "任务完成",
+                "elapsedSeconds":   round(completed_at - pipeline_start, 1),
+                "estimatedSeconds": 90,
+                "extra":            _extra,
+                "result":           result,
+            },
+        }
         SEP = "─" * 60
         logger.info(f"┌{SEP}")
-        logger.info(f"│ 完整输出 JSON  文件: {filename}  taskId: {task_id}")
-        for line in json.dumps(result, ensure_ascii=False, indent=2).splitlines():
+        logger.info(f"│ GET /api/resume/async/result  文件: {filename}  taskId: {task_id}")
+        for line in json.dumps(full_api_response, ensure_ascii=False, indent=2).splitlines():
             logger.info(f"│  {line}")
         logger.info(f"└{SEP}")
 
         # 持久化到 results/ 目录
         _save_result(task_id, filename, result)
 
-        await _set_task_field(task_id, status=3, result=result, completed_at=time.time())
+        await _set_task_field(task_id, status=3, result=result, completed_at=completed_at)
 
     except Exception as e:
         logger.error(f"[{task_id}] 任务失败: {e}")
@@ -1448,6 +1613,7 @@ async def get_async_result(taskId: str):
         "statusDesc":       _STATUS_DESC.get(rec.status, "未知"),
         "elapsedSeconds":   elapsed,
         "estimatedSeconds": rec.estimated_seconds,
+        "extra":            rec.extra,
     }
 
     if rec.status == 3:
@@ -1461,22 +1627,19 @@ async def get_async_result(taskId: str):
 @app.post("/api/resume/async/batch")
 async def async_batch_parse(request: dict):
     """
-    批量异步提交简历（JSON body），仅支持 type=url（从 MinIO / HTTP 下载）。
-    立即返回每份文件的 taskId，通过 GET /api/resume/async/result 轮询结果。
-    单次上限 20 份，后台并发执行。
+    批量异步提交简历（JSON raw body，仅支持 type=url）。
+    立即返回每份文件的 taskId，通过 GET /api/resume/async/result 轮询。
+    单次最多提交 20 份，后台并发执行，互不阻塞。
 
-    请求体：
+    请求体示例：
     {
       "resumes": [
-        {"type": "url", "file": {"name": "a.pdf", "path": "http://192.168.12.185:9000/resumes/a.pdf"}},
-        ...
+        {"type": "url", "file": {"name": "a.pdf", "path": "http://minio:9000/resumes/a.pdf", "extra": ""}},
       ],
-      "jobTitle": "岗位名称",
-      "requiredSkills": "技能1,技能2"
+      "jobTitle": "算法工程师"
     }
     """
     resumes_raw = request.get("resumes", [])
-
     if not resumes_raw:
         return JSONResponse(content={"code": 1001, "msg": "resumes 数组不能为空"})
     if not isinstance(resumes_raw, list):
@@ -1484,11 +1647,9 @@ async def async_batch_parse(request: dict):
     for item in resumes_raw:
         if not isinstance(item, dict) or item.get("type") != "url":
             t = item.get("type") if isinstance(item, dict) else type(item).__name__
-            return JSONResponse(content={"code": 1001,
-                "msg": f"resumes 仅支持 type=url，不支持: {t}"})
+            return JSONResponse(content={"code": 1001, "msg": f"resumes 仅支持 type=url，不支持: {t}"})
     if len(resumes_raw) > 20:
-        return JSONResponse(content={"code": 1003,
-            "msg": f"共 {len(resumes_raw)} 份，单次最多提交 20 份"})
+        return JSONResponse(content={"code": 1003, "msg": f"共 {len(resumes_raw)} 份，单次最多提交 20 份"})
 
     job_info = {
         "jobTitle":          request.get("jobTitle", "") or "",
@@ -1499,58 +1660,168 @@ async def async_batch_parse(request: dict):
 
     loop = asyncio.get_running_loop()
     tasks = []
-
     for item in resumes_raw:
         file_meta = item.get("file", {})
         filename  = file_meta.get("name", "resume.pdf")
-
+        extra     = file_meta.get("extra") or item.get("extra") or None
         try:
-            source, fn = await loop.run_in_executor(
-                executor, get_pdf_source_from_content, [item]
-            )
+            source, fn = await loop.run_in_executor(executor, get_pdf_source_from_content, [item])
         except Exception as e:
+            tasks.append({"filename": filename, "extra": extra, "code": 1001, "msg": f"文件下载失败: {str(e)}", "taskId": None})
+            continue
+        if source is None:
+            tasks.append({"filename": filename, "extra": extra, "code": 1001, "msg": "无法下载 PDF，请检查 URL 是否可访问", "taskId": None})
+            continue
+        task_id = str(uuid.uuid4())
+        rec = TaskRecord(task_id=task_id, extra=extra)
+        async with _task_lock:
+            _task_store[task_id] = rec
+        asyncio.create_task(_run_parse_and_tag(task_id, source, fn or filename, job_info))
+        logger.info(f"[batch] 任务入队 taskId={task_id} file={fn or filename} extra={extra}")
+        tasks.append({"filename": fn or filename, "extra": extra, "code": 0, "taskId": task_id, "status": 0, "statusDesc": "待处理"})
+
+    submitted = sum(1 for t in tasks if t["code"] == 0)
+    return JSONResponse(content={
+        "code": 0, "msg": "success",
+        "total": len(resumes_raw), "submitted": submitted,
+        "failed": len(resumes_raw) - submitted,
+        "estimatedSeconds": 90, "tasks": tasks,
+    })
+
+@app.post("/api/resume/async/batch/multiform")
+
+async def async_batch_parse_json(
+    files:             Optional[List[UploadFile]] = File(None),
+    resumes:           Optional[str]  = Form(None),
+    jobTitle:          Optional[str]  = Form(None),
+    requiredSkills:    Optional[str]  = Form(None),
+    jobDescription:    Optional[str]  = Form(None),
+    jobSensitiveWords: Optional[str]  = Form(None),
+):
+    """
+    批量异步提交，支持两种文件来源，可在同一请求中混用：
+
+      files  字段（File 类型，可多行）：直接上传 PDF 二进制
+      resumes字段（Text 类型，JSON 字符串，type=url）：
+        [
+          {"type": "url", "file": {"name": "a.pdf", "path": "http://minio:9000/resumes/a.pdf"}},
+          {"type": "url", "file": {"name": "b.pdf", "path": "http://minio:9000/resumes/b.pdf"}}
+        ]
+
+    两个字段均可选，但至少提供其中一个。合并后总数不超过 20 份。
+    """
+    if not files and not resumes:
+        return JSONResponse(content={"code": 1001, "msg": "files 或 resumes 至少提供一个"})
+
+    job_info = {
+        "jobTitle":          jobTitle or "",
+        "requiredSkills":    requiredSkills or "",
+        "jobDescription":    jobDescription or "",
+        "jobSensitiveWords": jobSensitiveWords or "",
+    }
+
+    # ── 解析 resumes JSON 字符串 ─────────────────────────────────
+    resume_items: list = []
+    if resumes:
+        try:
+            resume_items = json.loads(resumes)
+            if not isinstance(resume_items, list):
+                return JSONResponse(content={"code": 1001, "msg": "resumes 必须是 JSON 数组"})
+        except Exception:
+            return JSONResponse(content={"code": 1001, "msg": "resumes 不是合法的 JSON 字符串"})
+        # 只允许 type=url
+        for item in resume_items:
+            if item.get("type") != "url":
+                return JSONResponse(content={"code": 1001,
+                    "msg": f"resumes 仅支持 type=url，不支持: {item.get('type')}"})
+
+    total_count = len(files or []) + len(resume_items)
+    if total_count > 20:
+        return JSONResponse(content={"code": 1003, "msg": f"合并后共 {total_count} 份，单次最多提交 20 份"})
+
+    loop = asyncio.get_running_loop()
+    tasks = []
+
+    # ── 处理二进制上传文件 ────────────────────────────────────────
+    for upload in (files or []):
+        filename = upload.filename or "resume.pdf"
+        suffix   = Path(filename).suffix.lower()
+
+        if suffix not in ALLOWED_EXTENSIONS or suffix != ".pdf":
             tasks.append({"filename": filename, "code": 1001,
-                          "msg": f"文件下载失败: {str(e)}", "taskId": None})
+                          "msg": f"格式不支持: {suffix}", "taskId": None})
             continue
 
-        if source is None:
-            tasks.append({"filename": filename, "code": 1001,
-                          "msg": "无法下载 PDF，请检查 URL 是否可访问", "taskId": None})
+        file_bytes = await upload.read()
+        if len(file_bytes) > MAX_FILE_SIZE_MB * 1024 * 1024:
+            tasks.append({"filename": filename, "code": 1002,
+                          "msg": f"文件超过 {MAX_FILE_SIZE_MB}MB", "taskId": None})
             continue
 
         task_id = str(uuid.uuid4())
         async with _task_lock:
             _task_store[task_id] = TaskRecord(task_id=task_id)
 
+        asyncio.create_task(_run_parse_and_tag(task_id, file_bytes, filename, job_info))
+        logger.info(f"[batch/multiform] 任务入队 taskId={task_id} file={filename} type=upload")
+        tasks.append({"filename": filename, "code": 0,
+                      "taskId": task_id, "status": 0, "statusDesc": "待处理"})
+
+    # ── 处理 URL（从 MinIO / HTTP 下载）──────────────────────────
+    for item in resume_items:
+        file_meta = item.get("file", {})
+        filename  = file_meta.get("name", "resume.pdf")
+        extra     = file_meta.get("extra") or item.get("extra") or None
+
+        try:
+            source, fn = await loop.run_in_executor(
+                executor, get_pdf_source_from_content, [item]
+            )
+        except Exception as e:
+            tasks.append({"filename": filename, "extra": extra, "code": 1001,
+                          "msg": f"文件下载失败: {str(e)}", "taskId": None})
+            continue
+
+        if source is None:
+            tasks.append({"filename": filename, "extra": extra, "code": 1001,
+                          "msg": "无法下载 PDF，请检查 URL 是否可访问", "taskId": None})
+            continue
+
+        task_id = str(uuid.uuid4())
+        rec = TaskRecord(task_id=task_id, extra=extra)
+        async with _task_lock:
+            _task_store[task_id] = rec
+
         asyncio.create_task(_run_parse_and_tag(task_id, source, fn or filename, job_info))
-        logger.info(f"[batch] 任务入队 taskId={task_id} file={fn or filename} type=url")
-        tasks.append({"filename": fn or filename, "code": 0,
+        logger.info(f"[batch/multiform] 任务入队 taskId={task_id} file={fn or filename} type=url extra={extra}")
+        tasks.append({"filename": fn or filename, "extra": extra, "code": 0,
                       "taskId": task_id, "status": 0, "statusDesc": "待处理"})
 
     submitted = sum(1 for t in tasks if t["code"] == 0)
     return JSONResponse(content={
         "code":      0,
         "msg":       "success",
-        "total":     len(resumes_raw),
+        "total":     total_count,
         "submitted": submitted,
-        "failed":    len(resumes_raw) - submitted,
+        "failed":    total_count - submitted,
         "estimatedSeconds": 90,
         "tasks":     tasks,
     })
 
 
 @app.get("/api/tasks")
-async def list_tasks(status: Optional[int] = None):
+async def list_tasks(status: Optional[int] = None, include_result: bool = False):
     """
     查询内存中全部任务的状态摘要。
-    ?status=0/1/2/3/4  按状态过滤（不传则返回全部）
+    ?status=0/1/2/3/4       按状态过滤（不传则返回全部）
+    ?include_result=true    status=3 时同时返回完整 result JSON（默认 false）
     结果按创建时间倒序排列，最多返回 200 条（TTL 10min 内）。
     """
     async with _task_lock:
         snapshot = list(_task_store.items())
 
     now = time.time()
-    result = []
+    tasks = []
     for task_id, rec in sorted(snapshot, key=lambda x: x[1].created_at, reverse=True):
         if status is not None and rec.status != status:
             continue
@@ -1561,25 +1832,32 @@ async def list_tasks(status: Optional[int] = None):
             "statusDesc":     _STATUS_DESC.get(rec.status, "未知"),
             "elapsedSeconds": round(now - rec.created_at, 1),
             "createdAt":      datetime.fromtimestamp(rec.created_at).strftime("%Y-%m-%d %H:%M:%S"),
+            "extra":          rec.extra,
         }
 
         if rec.status == 3 and rec.result:
             c = rec.result.get("candidate", {})
-            item["candidateName"]    = c.get("name", "")
-            item["resumeParseTime"]  = rec.result.get("resumeParseFinishTime", "")
-            item["tagParseTime"]     = rec.result.get("tagParseFinishTime", "")
-            item["completedAt"]      = (
+            item["candidateName"]   = c.get("name", "")
+            item["resumeParseTime"] = rec.result.get("resumeParseFinishTime", "")
+            item["tagParseTime"]    = rec.result.get("tagParseFinishTime", "")
+            item["completedAt"]     = (
                 datetime.fromtimestamp(rec.completed_at).strftime("%Y-%m-%d %H:%M:%S")
                 if rec.completed_at else ""
             )
+            if include_result:
+                item["result"] = rec.result
         elif rec.status == 4:
             item["errorMsg"] = rec.error_msg
 
-        result.append(item)
+        tasks.append(item)
 
     return JSONResponse(content={
-        "total":  len(result),
-        "tasks":  result,
+        "code": 0,
+        "msg":  "success",
+        "data": {
+            "total": len(tasks),
+            "tasks": tasks,
+        },
     })
 
 
@@ -1599,7 +1877,7 @@ async def algorithm_parse(request: dict):
 @app.post("/algorithm/positive-tag/extract")
 async def algorithm_positive_tag(request: dict):
     """内部接口：从结构化简历提取正向标签"""
-    from tagger import extract_positive_tags_llm
+    from tag.tagger import extract_positive_tags_llm
     resume = request.get("resume", {})
     job_info = request.get("jobInfo", {})
     if not resume:
@@ -1616,7 +1894,7 @@ async def algorithm_positive_tag(request: dict):
 @app.post("/algorithm/sensitive-tag/detect")
 async def algorithm_sensitive_tag(request: dict):
     """内部接口：敏感词/风险检测"""
-    from tagger import detect_sensitive_tags
+    from tag.tagger import detect_sensitive_tags
     resume = request.get("resume", {})
     job_info = request.get("jobInfo", {})
     if not resume:
