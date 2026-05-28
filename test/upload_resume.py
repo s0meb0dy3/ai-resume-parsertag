@@ -16,7 +16,7 @@ from pathlib import Path
 
 import requests
 
-DEFAULT_URL = "http://localhost:21801"
+DEFAULT_URL = "http://localhost:21804"
 TIMEOUT = 300
 
 

@@ -1,7 +1,7 @@
 # AIHR 简历解析打标 — Postman 使用说明
 
-> 版本：v3.2  
-> 服务地址（生产）：`http://192.168.12.185:21801`  
+> 版本：v3.3  
+> 服务地址（生产）：`http://192.168.12.185:21804`  
 > 服务地址（Mac本地）：`http://localhost:21804`  
 > MinIO 地址：`http://192.168.12.185:9000`（bucket: `resumes`，账号: `minioadmin/minioadmin`）
 
@@ -12,20 +12,23 @@
 | 编号 | 方法 | 路径 | 说明 |
 |:----:|:----:|------|------|
 | 01 | GET | `/health` | 健康检查 |
-| **02** | **POST** | `/api/resume/async/batch` | **批量简历提交（MinIO URL）** |
-| **03** | **GET** | `/api/resume/async/result?taskId=` | **轮询单个任务结果** |
-| **04** | **GET** | `/api/tasks` | **任务总览（全部任务状态）** |
-| 05 | GET | `/api/tags/config` | 查询标签配置 |
-| 06 | POST | `/api/tags/config/positive` | 新增正向维度 |
-| 07 | PUT | `/api/tags/config/positive/{dimension}` | 更新正向维度 |
-| 08 | DELETE | `/api/tags/config/positive/{dimension}` | 删除正向维度 |
-| 09 | PUT | `/api/tags/config/negative/{dimension}` | 更新负向维度 |
-| 10 | POST | `/api/tags/config/negative/{dimension}/rules` | 新增负向规则 |
-| 11 | PUT | `/api/tags/config/negative/{dimension}/rules/{ruleKey}` | 更新负向规则 |
-| 12 | DELETE | `/api/tags/config/negative/{dimension}/rules/{ruleKey}` | 删除负向规则 |
-| 13 | PUT | `/api/tags/config/severity` | 更新扣分权重 |
-| 14 | POST | `/api/tags/config/reset` | 重置为默认配置 |
-| 15 | POST | `/v1/chat/completions` | OpenAI 兼容层（OneAPI 转发） |
+| **02** | **POST** | `/api/resume/async/parse` | **单文件简历提交（multipart 上传）** |
+| **03** | **POST** | `/api/resume/async/batch` | **批量简历提交（MinIO URL）** |
+| **04** | **GET** | `/api/resume/async/result?taskId=` | **轮询单个任务结果** |
+| **05** | **GET** | `/api/tasks` | **任务总览（全部任务状态）** |
+| 06 | GET | `/api/tags/config` | 查询标签配置 |
+| 07 | POST | `/api/tags/config/positive` | 新增正向维度 🔒 |
+| 08 | PUT | `/api/tags/config/positive/{dimension}` | 更新正向维度 🔒 |
+| 09 | DELETE | `/api/tags/config/positive/{dimension}` | 删除正向维度 🔒 |
+| 10 | PUT | `/api/tags/config/negative/{dimension}` | 更新负向维度 🔒 |
+| 11 | POST | `/api/tags/config/negative/{dimension}/rules` | 新增负向规则 🔒 |
+| 12 | PUT | `/api/tags/config/negative/{dimension}/rules/{ruleKey}` | 更新负向规则 🔒 |
+| 13 | DELETE | `/api/tags/config/negative/{dimension}/rules/{ruleKey}` | 删除负向规则 🔒 |
+| 14 | PUT | `/api/tags/config/severity` | 更新扣分权重 🔒 |
+| 15 | POST | `/api/tags/config/reset` | 重置为默认配置 🔒 |
+| 16 | POST | `/v1/chat/completions` | OpenAI 兼容层（OneAPI 转发） |
+
+> 🔒 标注的接口为写操作，需在 Header 中添加 `Authorization: Bearer <TAGS_ADMIN_TOKEN>`（服务未配置 `TAGS_ADMIN_TOKEN` 时可跳过）
 
 ---
 
@@ -33,8 +36,9 @@
 
 | 变量名 | 默认值 | 说明 |
 |--------|--------|------|
-| `base_url` | `http://192.168.12.185:21801` | 解析服务地址 |
-| `task_id` | （空） | 提交后手动填入，接口 03 读取 |
+| `base_url` | `http://192.168.12.185:21804` | 解析服务地址 |
+| `task_id` | （空） | 提交后手动填入，接口 04 读取 |
+| `admin_token` | （空） | 写接口 Bearer Token，对应 `TAGS_ADMIN_TOKEN` 环境变量 |
 
 ---
 
@@ -51,7 +55,51 @@ GET /health
 
 ---
 
-## 四、接口 02 — 批量简历提交
+## 四、接口 02 — 单文件简历提交
+
+```
+POST /api/resume/async/parse
+Content-Type: multipart/form-data
+```
+
+上传单份 PDF 文件，立即返回 `taskId`，后台异步完成解析+打标全流程。
+
+### Postman 操作
+
+1. Body → **form-data**
+2. 添加 Key `file`，类型选 **File**，选择本地 PDF 文件
+3. 按需添加以下可选字段
+
+### 参数
+
+| Key | 类型 | 必填 | 说明 |
+|-----|------|:----:|------|
+| `file` | File | ✅ | PDF 文件，≤20MB |
+| `requestId` | Text | ✗ | 幂等标识，相同 requestId 直接返回已有 taskId |
+| `jobTitle` | Text | ✗ | 目标岗位名称 |
+| `requiredSkills` | Text | ✗ | 必要技能，逗号分隔 |
+| `jobDescription` | Text | ✗ | JD 全文 |
+| `jobSensitiveWords` | Text | ✗ | 自定义敏感词，逗号/分号分隔 |
+
+### 响应
+
+```json
+{
+  "code": 0, "msg": "success",
+  "data": {
+    "taskId": "aaa-111",
+    "status": 0,
+    "statusDesc": "待处理",
+    "estimatedSeconds": 90
+  }
+}
+```
+
+> 拿到 `taskId` 后，通过接口 04 轮询结果。
+
+---
+
+## 五、接口 03 — 批量简历提交
 
 ```
 POST /api/resume/async/batch
@@ -65,7 +113,7 @@ Content-Type: application/json
 1. Body → **raw** → 右侧下拉选 **JSON**
 2. 粘贴以下请求体
 
-### 请求体
+### 请求体（接口 03）
 
 ```json
 {
@@ -145,7 +193,7 @@ Content-Type: application/json
 
 ---
 
-## 五、接口 03 — 轮询单个任务结果
+## 六、接口 04 — 轮询单个任务结果
 
 ```
 GET /api/resume/async/result?taskId={{task_id}}
@@ -217,7 +265,7 @@ GET /api/resume/async/result?taskId={{task_id}}
 
 ---
 
-## 六、接口 04 — 任务总览
+## 七、接口 05 — 任务总览
 
 ```
 GET /api/tasks
@@ -270,10 +318,11 @@ GET /api/tasks?status=3&include_result=true   已完成且返回完整 result JS
 
 ---
 
-## 七、接口 05~14 — 标签配置 CRUD
+## 八、接口 06~15 — 标签配置 CRUD
 
-> 所有写操作持久化到容器内 `tag_config_runtime.json`，**无需重启服务**。  
-> 调用接口 14（reset）可一键恢复默认值。
+> 所有写操作（接口 07~15）持久化到容器内 `schemas/tag_config_runtime.json`，**无需重启服务**。  
+> 调用接口 15（reset）可一键恢复默认值。  
+> **鉴权**：写接口需在 Header 中添加 `Authorization: Bearer {{admin_token}}`（服务未配置 `TAGS_ADMIN_TOKEN` 时可跳过）。
 
 所有接口统一响应格式：
 
@@ -291,7 +340,7 @@ GET /api/tasks?status=3&include_result=true   已完成且返回完整 result JS
 
 ---
 
-### 接口 05 — 查询全部配置
+### 接口 06 — 查询全部配置
 
 ```
 GET /api/tags/config
@@ -357,7 +406,7 @@ GET /api/tags/config
 
 ---
 
-### 接口 06 — 新增正向维度
+### 接口 07 — 新增正向维度
 
 ```
 POST /api/tags/config/positive
@@ -386,7 +435,7 @@ Content-Type: application/json
 
 ---
 
-### 接口 07 — 更新正向维度
+### 接口 08 — 更新正向维度
 
 ```
 PUT /api/tags/config/positive/{dimension}
@@ -413,7 +462,7 @@ Content-Type: application/json
 
 ---
 
-### 接口 08 — 删除正向维度
+### 接口 09 — 删除正向维度
 
 ```
 DELETE /api/tags/config/positive/{dimension}
@@ -429,7 +478,7 @@ DELETE /api/tags/config/positive/language
 
 ---
 
-### 接口 09 — 更新负向维度
+### 接口 10 — 更新负向维度
 
 ```
 PUT /api/tags/config/negative/{dimension}
@@ -451,7 +500,7 @@ Body: {"enabled": false}
 
 ---
 
-### 接口 10 — 新增负向规则
+### 接口 11 — 新增负向规则
 
 ```
 POST /api/tags/config/negative/{dimension}/rules
@@ -482,7 +531,7 @@ Content-Type: application/json
 
 ---
 
-### 接口 11 — 更新负向规则
+### 接口 12 — 更新负向规则
 
 ```
 PUT /api/tags/config/negative/{dimension}/rules/{ruleKey}
@@ -520,7 +569,7 @@ PUT /api/tags/config/negative/jobstable/rules/gap_period
 
 ---
 
-### 接口 12 — 删除负向规则
+### 接口 13 — 删除负向规则
 
 ```
 DELETE /api/tags/config/negative/{dimension}/rules/{ruleKey}
@@ -536,7 +585,7 @@ DELETE /api/tags/config/negative/matchRisk/rules/short_career
 
 ---
 
-### 接口 13 — 更新扣分权重
+### 接口 14 — 更新扣分权重
 
 ```
 PUT /api/tags/config/severity
@@ -553,17 +602,17 @@ Content-Type: application/json
 
 ---
 
-### 接口 14 — 重置为默认配置
+### 接口 15 — 重置为默认配置
 
 ```
 POST /api/tags/config/reset
 ```
 
-无 Body。删除容器内 `tag_config_runtime.json`，所有修改回滚到 `tag_config.py` 默认值。
+无 Body。删除容器内 `schemas/tag_config_runtime.json`，所有修改回滚到 `tag_config.py` 默认值。
 
 ---
 
-## 八、接口 15 — OpenAI 兼容层（OneAPI 转发）
+## 九、接口 16 — OpenAI 兼容层（OneAPI 转发）
 
 ```
 POST /v1/chat/completions
@@ -633,7 +682,7 @@ Content-Type: application/json
 
 ---
 
-## 九、字段速查
+## 十、字段速查
 
 ### positiveTags 维度枚举
 
@@ -679,7 +728,7 @@ Content-Type: application/json
 
 ---
 
-## 十、错误码
+## 十一、错误码
 
 | code | 含义 | 处理建议 |
 |:----:|------|---------|
@@ -692,7 +741,7 @@ Content-Type: application/json
 
 ---
 
-## 十一、常见问题
+## 十二、常见问题
 
 **Q: MinIO URL 中文件名有中文怎么处理？**  
 A: 中文需 URL 编码。Python：`urllib.parse.quote(filename)`；Java：`URLEncoder.encode(filename, "UTF-8")`（注意把 `+` 替换为 `%20`）。
@@ -705,7 +754,7 @@ Mac 本地 Docker 部署时，URL 须使用 `http://host.docker.internal:9000/..
 A: 任务 TTL=10 分钟，超时自动清除；或检查是否提交到了不同端口的实例。
 
 **Q: 标签配置修改后如何生效？**  
-A: 通过接口 06~13 修改后立即生效，无需重启服务。调用接口 14（reset）可一键恢复默认值。
+A: 通过接口 07~14 修改后立即生效，无需重启服务（写入 `schemas/tag_config_runtime.json`，服务通过 mtime 缓存自动感知）。调用接口 15（reset）可一键恢复默认值。
 
 **Q: `extra` 字段有什么用？**  
 A: 调用方在提交时传入自己的业务 ID（如 userId、resumeId 等），服务原样存储并在接口 03 / 接口 04 响应中透传返回，方便业务侧做数据关联。
@@ -714,6 +763,7 @@ A: 调用方在提交时传入自己的业务 ID（如 userId、resumeId 等）�
 
 | 项目 | 生产 | Mac 本地 |
 |------|------|---------|
-| 服务地址 | `http://192.168.12.185:21801` | `http://localhost:21804` |
+| 服务地址 | `http://192.168.12.185:21804` | `http://localhost:21804` |
 | MinIO URL（容器内访问） | `http://192.168.12.185:9000` | `http://host.docker.internal:9000` |
-| 模型服务 | 直连 `10.2.5.7:13001` | socat 转发到 `host.docker.internal:13001` |
+| 模型服务 | 直连内网 vLLM 服务 | socat 转发到 `host.docker.internal` |
+| 写接口鉴权 | 需配置 `TAGS_ADMIN_TOKEN` | 本地测试可不配置（跳过鉴权） |

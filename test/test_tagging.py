@@ -16,9 +16,9 @@ from pathlib import Path
 
 import requests
 
-HOST      = "http://localhost:21801"
-_BASE     = Path(__file__).parent
-TEST_DIR  = _BASE / "uploads" / "test_full"
+HOST       = "http://localhost:21804"
+_BASE      = Path(__file__).parent.parent   # 项目根目录
+TEST_DIR   = _BASE / "uploads"
 RESULT_DIR = _BASE / "results"
 
 STATUS_DESC = {0: "待处理", 1: "简历解析中", 2: "标签打标中", 3: "任务完成", 4: "任务失败"}

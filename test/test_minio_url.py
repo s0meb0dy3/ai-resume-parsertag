@@ -7,7 +7,7 @@ import json, sys, time, urllib.parse
 from pathlib import Path
 import requests
 
-HOST      = "http://localhost:21801"
+HOST      = "http://localhost:21804"
 MINIO     = "http://localhost:9000/resumes"
 BATCH_EP  = f"{HOST}/api/resume/async/batch/multiform"
 RESULT_EP = f"{HOST}/api/resume/async/result"

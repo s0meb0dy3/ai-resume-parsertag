@@ -1,7 +1,7 @@
 # AI 简历解析 + 智能打标 技术方案
 
-> 版本：v3.2
-> 日期：2026-05-25
+> 版本：v3.3
+> 日期：2026-05-27
 > 作者：AIHR 技术团队
 
 ---
@@ -336,7 +336,7 @@ SEVERITY_DEDUCTION = {"low": -5, "medium": -10, "high": -20}
     ├─ POST /api/resume/async/batch/multiform  ← 批量异步（files + urls 混合，≤20份）
     └─ GET  /api/resume/async/result           ← 轮询结果
 
-AIHR Python 服务（FastAPI v3.1.0，端口 21801）
+AIHR Python 服务（FastAPI v3.1.0，端口 21804）
     │
     ├─ uvicorn asyncio 事件循环（接收/响应请求）
     │
@@ -472,114 +472,123 @@ class TaskRecord:
 #### 5.5.1 文件依赖关系
 
 ```
-app.py
-  ├── import tagger          → tagger.py
-  │     ├── from tag_data    → tag_data.py
-  │     │     └── (读取)       tag_static_data.json（人工维护，不直接 import）
-  │     └── from tag_config  → tag_config.py
-  └── from openai import OpenAI  → Qwen3.5-397B-A17B（OpenAI 兼容接口）
+app.py（入口）
+  ├── api/routes_async.py      → 异步解析+打标接口
+  │     └── tasks.py           → 任务状态机 + 流水线编排
+  │           ├── parser.py    → PDF 解析核心（LLM 调用 + 分批并发）
+  │           │     ├── pdf_utils.py    → PDF 渲染（fitz + PIL，DPI=144）
+  │           │     └── postprocess.py → 后处理 + Schema 校验 + 合并 + 序列化
+  │           ├── file_utils.py → 文件下载与 PDF 来源识别
+  │           └── tag/tagger.py → 正向打标 + 风险检测
+  │                 ├── tag_data.py    → 院校/公司/行业数据（启动时加载）
+  │                 │     └── (读取) schemas/tag_static_data.json（人工维护）
+  │                 └── tag_config.py  → 打标维度默认配置（兜底值）
+  ├── api/routes_openai.py     → OpenAI 兼容接口
+  ├── api/routes_tags.py       → 打标配置 CRUD
+  │     └── (读写) schemas/tag_config_runtime.json
+  └── api/routes_algorithm.py  → 算法内部接口（仅打标，无解析）
 ```
 
 #### 5.5.2 主流程：单文件异步解析+打标
 
 ```
 POST /api/resume/async/parse
-  app.py:1352  async_parse_resume()
+  api/routes_async.py  async_parse_resume()
     │  校验文件格式 / 大小 / 幂等 requestId
     │  生成 task_id，写入 _task_store[task_id] = TaskRecord(status=0)
     └─ asyncio.create_task(
-         app.py:1296  _run_parse_and_tag(task_id, file_bytes, filename, job_info)
+         tasks.py  _run_parse_and_tag(task_id, file_bytes, filename, job_info)
        )
        ├─ [阶段一] status → 1
        │   loop.run_in_executor(executor,
-       │     app.py:868  _parse_with_logging(source, filename)
-       │       app.py:491  run(source, verbose=True)
-       │         app.py:281  pdf_to_images(source)
-       │           app.py:272  _open_pdf(source)          ← fitz.open + 加密检测
-       │           fitz.Document.get_pixmap()             ← 每页渲染 PNG（DPI=144）
+       │     parser.py  _parse_with_logging(source, filename)
+       │       parser.py  run(source, verbose=True)
+       │         pdf_utils.py  pdf_to_images(source)
+       │           pdf_utils.py  _open_pdf(source)         ← fitz.open + 加密检测
+       │           fitz.Document.get_pixmap()              ← 每页渲染 PNG（DPI=144）
        │           PIL.Image.open()
        │         ┌─ [≤8页] 一次调用 ──────────────────────────────────┐
-       │         │  app.py:241  _llm_call(messages)                   │
+       │         │  parser.py  _llm_call(messages)                    │
        │         │    openai.OpenAI.chat.completions.create()         │
        │         │    → Qwen3.5-397B-A17B（多模态，images + prompt）  │
        │         └───────────────────────────────────────────────────┘
        │         ┌─ [>8页] 分批并发 ──────────────────────────────────┐
-       │         │  app.py:309  pdf_to_batches(source, batch_size)    │
-       │         │  app.py:328  smart_batch_size(page_count)          │
+       │         │  pdf_utils.py  pdf_to_batches(source, batch_size)  │
+       │         │  pdf_utils.py  smart_batch_size(page_count)        │
        │         │  ThreadPoolExecutor.map(                           │
-       │         │    app.py:538  _infer_single_batch(batch)          │
-       │         │      app.py:241  _llm_call(messages)               │
+       │         │    parser.py  _infer_batch(batch)                  │
+       │         │      parser.py  _llm_call(messages)                │
        │         │  )                                                 │
-       │         │  app.py:472  _merge_results(batch_results)         │
-       │         │    app.py:446  _merge_candidate(a, b)              │
-       │         │    app.py:460  _dedup(items, keys)                 │
+       │         │  postprocess.py  _merge_results(batch_results)     │
+       │         │    postprocess.py  _merge_candidate(a, b)          │
+       │         │    postprocess.py  _dedup(items, keys)             │
        │         └───────────────────────────────────────────────────┘
        │         json_repair.loads(raw)
-       │         app.py:340  _post_process(data)          ← gender/age 规范化
-       │         app.py:358  _validate_schema(data)       ← 字段补全/类型校验
-       │       app.py:631  _log_result(result, filename, elapsed)
+       │         postprocess.py  _post_process(data)       ← gender/age 规范化
+       │         postprocess.py  _validate_schema(data)    ← 字段补全/类型校验
+       │       parser.py  _log_result(result, filename, elapsed)
        │   )
        │
        ├─ [阶段二] status → 2
        │   loop.run_in_executor(executor,
-       │     tagger.py:604  run_tagging(resume, job_info, llm_call_fn=_llm_call)
-       │       tagger.py:353  extract_positive_tags_llm(resume, job_info, llm_call_fn)
+       │     tag/tagger.py  run_tagging(resume, job_info, llm_call_fn=_llm_call)
+       │       tagger.py  extract_positive_tags_llm(resume, job_info, llm_call_fn)
        │         POSITIVE_TAG_PROMPT.format(resume_json, job_title, ...)
-       │         app.py:241  _llm_call(messages)          ← 纯文本，5维度打标
+       │         parser.py  _llm_call(messages)            ← 纯文本，5维度打标
        │         json_repair.loads(raw)
-       │         tagger.py:231  _normalize_positive_tags(tags, resume)
-       │           tagger.py:167  _expand_edu_values(raw_values)
-       │             tag_data.py:76  EDUCATION_HIERARCHY.get(v)
-       │           tagger.py:162  _normalize_work_years_str(v)
-       │           tag_data.py:91  classify_education()   ← 补充缺失 education
-       │           tagger.py:118  _calc_work_years()      ← 补充缺失 workYears
+       │         tagger.py  _normalize_positive_tags(tags, resume)
+       │           tagger.py  _expand_edu_values(raw_values)
+       │             tag_data.py  EDUCATION_HIERARCHY.get(v)
+       │           tagger.py  _normalize_work_years_str(v)
+       │           tag_data.py  classify_education()       ← 补充缺失 education
+       │           tagger.py  _calc_work_years()           ← 补充缺失 workYears
        │         ─ LLM 失败时降级 ──────────────────────────────────────
-       │         tagger.py:179  extract_positive_tags_rule(resume)
-       │           tag_data.py:91   classify_education(schools, degrees)
-       │             tag_data.py:8   C9_SCHOOLS（set 精确匹配）
-       │             tag_data.py:13  SCHOOLS_985
-       │             tag_data.py:22  SCHOOLS_211
-       │             tag_data.py:44  QS_TOP50
-       │             tag_data.py:57  QS_TOP100
-       │             tag_data.py:76  EDUCATION_HIERARCHY（层级展开）
-       │           tagger.py:118  _calc_work_years(works)
-       │             tagger.py:100  _parse_date(date_str)  ← 支持"至今"/"present"
+       │         tagger.py  extract_positive_tags_rule(resume)
+       │           tag_data.py  classify_education(schools, degrees)
+       │             tag_data.py  C9_SCHOOLS（set 精确匹配）
+       │             tag_data.py  SCHOOLS_985
+       │             tag_data.py  SCHOOLS_211
+       │             tag_data.py  QS_TOP50
+       │             tag_data.py  QS_TOP100
+       │             tag_data.py  EDUCATION_HIERARCHY（层级展开）
+       │           tagger.py  _calc_work_years(works)
+       │             tagger.py  _parse_date(date_str)      ← 支持"至今"/"present"
        │             dateutil.relativedelta
-       │           tagger.py:130  _map_work_years(years)
-       │           tag_data.py:251  classify_companies(companies)
-       │             tag_data.py:155  TOP_TIER_COMPANIES
-       │             tag_data.py:190  FORTUNE500_COMPANIES
-       │             tag_data.py:211  FIRST_TIER_FOREIGN
-       │             tag_data.py:169  MID_TIER_COMPANIES
-       │             tag_data.py:228  UNICORN_COMPANIES
-       │             tag_data.py:221  STATE_OWNED_KEYWORDS
-       │           tag_data.py:349  classify_industry(all_text)
-       │             tag_data.py:304  INDUSTRY_KEYWORDS（10个行业，词频打分）
+       │           tagger.py  _map_work_years(years)
+       │           tag_data.py  classify_companies(companies)
+       │             tag_data.py  TOP_TIER_COMPANIES
+       │             tag_data.py  FORTUNE500_COMPANIES
+       │             tag_data.py  FIRST_TIER_FOREIGN
+       │             tag_data.py  MID_TIER_COMPANIES
+       │             tag_data.py  UNICORN_COMPANIES
+       │             tag_data.py  STATE_OWNED_KEYWORDS
+       │           tag_data.py  classify_industry(all_text)
+       │             tag_data.py  INDUSTRY_KEYWORDS（10个行业，词频打分）
        │
-       │       tagger.py:390  detect_sensitive_tags(resume, job_info)
-       │         tagger.py:385  _neg_cfg_map()
-       │           tag_config.py:52  NEGATIVE_DIMENSIONS（4个维度配置）
-       │         tagger.py:446  _detect_stability(works, hit_tags, rules)
-       │           tagger.py:100  _parse_date()
+       │       tagger.py  detect_sensitive_tags(resume, job_info)
+       │         tagger.py  _neg_cfg_map()
+       │           tag_config.py  NEGATIVE_DIMENSIONS（4个维度配置）
+       │         tagger.py  _detect_stability(works, hit_tags, rules)
+       │           tagger.py  _parse_date()
        │           rules["frequent_job_change"]  ← window_years=3, threshold=4
        │           rules["short_tenure"]          ← threshold_months=3
        │           rules["gap_period"]            ← threshold_months=6
-       │         tagger.py:516  _detect_timeline_overlap(works, hit_tags, rules)
-       │           tagger.py:100  _parse_date()
+       │         tagger.py  _detect_timeline_overlap(works, hit_tags, rules)
+       │           tagger.py  _parse_date()
        │           rules["timeline_overlap"]      ← threshold_months=2
-       │         tagger.py:547  _parse_sensitive_words(jobSensitiveWords)
-       │         tagger.py:553  _detect_custom_words(resume, candidate, words, ...)
-       │         tagger.py:583  _detect_education_risk(educations, hit_tags, rules)
+       │         tagger.py  _parse_sensitive_words(jobSensitiveWords)
+       │         tagger.py  _detect_custom_words(resume, candidate, words, ...)
+       │         tagger.py  _detect_education_risk(educations, hit_tags, rules)
        │           rules["training_institution"]  ← keywords 列表匹配
-       │         tag_config.py:120  SEVERITY_DEDUCTION（扣分权重）
+       │         tag_config.py  SEVERITY_DEDUCTION（扣分权重）
        │   )
        │
-       ├─ app.py:678   _log_tag_info(task_id, filename, tag_info, ...)
-       ├─ app.py:720   _conform_to_template(task_id, resume, tag_info, ...)
-       │     tag_config.py:7    POSITIVE_DIMENSIONS（displayName 映射）
-       │     tag_config.py:52   NEGATIVE_DIMENSIONS（dimension code 映射）
-       │     tag_data.py:91    classify_education()  ← education QS 等级规则补全
-       ├─ app.py:854   _save_result(task_id, filename, result)  → results/*.json
+       ├─ tasks.py   _log_tag_info(task_id, filename, tag_info, ...)
+       ├─ postprocess.py  _conform_to_template(task_id, resume, tag_info, ...)
+       │     load_tag_cfg()              ← mtime 缓存，每次打标读最新运行时配置
+       │     _build_display_maps(cfg)   ← 动态构建 displayName 查找表
+       │     tag_data.py  classify_education()  ← education 规则层补全
+       ├─ parser.py  _save_result(task_id, filename, result)  → results/*.json
        └─ _set_task_field(task_id, status=3, result=result)
 ```
 
@@ -587,23 +596,23 @@ POST /api/resume/async/parse
 
 ```
 POST /v1/chat/completions  (model=DeepSeek-OCR-JSON 或 AIHR-Resume)
-  app.py:990  create_chat_completion(request)
-    app.py:998  _is_probe(contents)            ← 健康探测短路返回
-    app.py:598  get_pdf_source_from_content(contents)
-      ├─ type=url    → app.py:579  download_file(url, filename)
+  api/routes_openai.py  create_chat_completion(request)
+    api/routes_openai.py  _is_probe(contents)    ← 健康探测短路返回
+    file_utils.py  get_pdf_source_from_content(contents)
+      ├─ type=url    → file_utils.py  download_file(url, filename)
       │                  requests.get() + %PDF 魔数校验
       ├─ type=file   → 直接使用本地路径
       └─ type=base64 → base64.b64decode()
     ─ async_mode=false（同步，默认） ────────────────────────────────────
-    await app.py:1296  _run_parse_and_tag(...)   ← 等待完整流水线
+    await tasks.py  _run_parse_and_tag(...)       ← 等待完整流水线
     ─ async_mode=true（异步） ──────────────────────────────────────────
-    asyncio.create_task(_run_parse_and_tag(...)) ← 立即返回 taskId
+    asyncio.create_task(_run_parse_and_tag(...))  ← 立即返回 taskId
 
 POST /v1/chat/completions  (model=DeepSeek-OCR)
-  app.py:990  create_chat_completion(request)
-    app.py:598  get_pdf_source_from_content(contents)
+  api/routes_openai.py  create_chat_completion(request)
+    file_utils.py  get_pdf_source_from_content(contents)
     loop.run_in_executor(executor,
-      app.py:868  _parse_with_logging(source, filename)  ← 仅解析，不打标
+      parser.py  _parse_with_logging(source, filename)  ← 仅解析，不打标
     )
     返回结构化简历 JSON 字符串（OpenAI message.content）
 ```
@@ -614,7 +623,7 @@ POST /v1/chat/completions  (model=DeepSeek-OCR)
 
 ```text
 POST /api/resume/async/batch
-  app.py:1443  async_batch_parse(request: dict)
+  api/routes_async.py  async_batch_parse(request: dict)
   │
   ├─ [入参校验]
   │   resumes_raw = request.get("resumes", [])
@@ -640,12 +649,12 @@ POST /api/resume/async/batch
   │     ├─ [文件下载，阻塞 IO 卸载到线程池]
   │     │   source, fn = await loop.run_in_executor(
   │     │     executor,
-  │     │     app.py:598  get_pdf_source_from_content([item])
+  │     │     file_utils.py  get_pdf_source_from_content([item])
   │     │       │  遍历 content_items，找到第一个 type != "text" 的项
   │     │       │  ctype = item["type"]  → "url"
   │     │       │  file_data = item["file"]
   │     │       │  filename  = file_data["name"]
-  │     │       └─ app.py:579  download_file(file_data["path"], filename)
+  │     │       └─ file_utils.py  download_file(file_data["path"], filename)
   │     │             requests.get(url, timeout=60)   ← HTTP/HTTPS 下载
   │     │             response.raise_for_status()     ← 非 2xx 抛异常
   │     │             content = response.content
@@ -672,7 +681,7 @@ POST /api/resume/async/batch
   │     │
   │     ├─ [提交后台流水线（非阻塞）]
   │     │   asyncio.create_task(
-  │     │     app.py:1296  _run_parse_and_tag(task_id, source, fn or filename, job_info)
+  │     │     tasks.py  _run_parse_and_tag(task_id, source, fn or filename, job_info)
   │     │   )                                         ← 立即返回，不等待完成
   │     │   注：source 此时为 uploads/ 目录下的本地路径
   │     │
@@ -706,10 +715,10 @@ POST /api/resume/async/batch
 
 ```text
 POST /api/resume/async/batch/multiform
-  app.py:1509  async_batch_parse_json(
-                 files, resumes, jobTitle, requiredSkills,
-                 jobDescription, jobSensitiveWords
-               )
+  api/routes_async.py  async_batch_multiform_parse(
+                         files, resumes, jobTitle, requiredSkills,
+                         jobDescription, jobSensitiveWords
+                       )
   │
   ├─ [入参校验]
   │   ① files 和 resumes 均为空  → 400  {"code":1001, "msg":"files 或 resumes 至少提供一个"}
@@ -729,7 +738,7 @@ POST /api/resume/async/batch/multiform
   │     async with _task_lock:
   │       _task_store[task_id] = TaskRecord(task_id=task_id)
   │     asyncio.create_task(
-  │       app.py:1296  _run_parse_and_tag(task_id, file_bytes, filename, job_info)
+  │       tasks.py  _run_parse_and_tag(task_id, file_bytes, filename, job_info)
   │     )                                            ← source = bytes（不落盘）
   │     tasks.append({"code":0, "taskId":task_id, ...})
   │
@@ -740,15 +749,15 @@ POST /api/resume/async/batch/multiform
         extra    = item["file"].get("extra") or item.get("extra")
         source, fn = await loop.run_in_executor(
           executor,
-          app.py:598  get_pdf_source_from_content([item])
-            └─ app.py:579  download_file(url, filename)  ← 下载并落盘 uploads/
+          file_utils.py  get_pdf_source_from_content([item])
+            └─ file_utils.py  download_file(url, filename)  ← 下载并落盘 uploads/
         )
         task_id = str(uuid.uuid4())
         rec = TaskRecord(task_id=task_id, extra=extra)
         async with _task_lock:
           _task_store[task_id] = rec
         asyncio.create_task(
-          app.py:1296  _run_parse_and_tag(task_id, source, fn or filename, job_info)
+          tasks.py  _run_parse_and_tag(task_id, source, fn or filename, job_info)
         )
         tasks.append({"code":0, "taskId":task_id, "extra":extra, ...})
 ```
@@ -765,42 +774,41 @@ POST /api/resume/async/batch/multiform
 #### 5.5.5 内部原子接口链路
 
 ```
-POST /algorithm/resume/parse
-  app.py:1674  algorithm_parse(request)
-    get_pdf_source_from_content(request["content"])
-    loop.run_in_executor(executor, _parse_with_logging, source, filename)
-    → 返回结构化简历 JSON
-
 POST /algorithm/positive-tag/extract
-  app.py:1685  algorithm_positive_tag(request)
-    tagger.py:353  extract_positive_tags_llm(resume, job_info, _llm_call)
+  api/routes_algorithm.py  algorithm_positive_tag(request)
+    tag/tagger.py  extract_positive_tags_llm(resume, job_info, _llm_call)
     → 返回 {positiveTags, confidence}
 
 POST /algorithm/sensitive-tag/detect
-  app.py:1702  algorithm_sensitive_tag(request)
-    tagger.py:390  detect_sensitive_tags(resume, job_info)
+  api/routes_algorithm.py  algorithm_sensitive_tag(request)
+    tag/tagger.py  detect_sensitive_tags(resume, job_info)
     → 返回 {hitTags, hitCount, deductionScore}
 ```
 
 #### 5.5.6 标签配置 CRUD 链路
 
 ```
-# ── 辅助函数 ────────────────────────────────────────────────
-_cfg_load()                           ← 优先读 tag_config_runtime.json
+# ── 辅助函数（api/routes_tags.py）─────────────────────────────
+_cfg_load()                           ← 优先读 schemas/tag_config_runtime.json
   ├─ 文件存在 → json.load()
   └─ 文件不存在 → importlib.reload(tag_config)
                     copy.deepcopy(POSITIVE/NEGATIVE_DIMENSIONS, SEVERITY_DEDUCTION)
 
 _cfg_save(cfg)                        ← 原子写入（tmp → rename）
   tmp = tag_config_runtime.tmp
-  json.dump(cfg) → tmp.replace(tag_config_runtime.json)
+  json.dump(cfg) → tmp.replace(schemas/tag_config_runtime.json)
 
 # ── 查询 ────────────────────────────────────────────────────
 GET /api/tags/config
-  app.py  get_tags_config()
-    async with _cfg_lock:
+  api/routes_tags.py  get_tags_config()
+    async with _cfg_lock:              ← tasks.py 中的 asyncio.Lock
       _cfg_load()                     ← 读 JSON 或 .py 默认值
     → _cfg_response(cfg)              ← {"code":0,"msg":"success","data":{...,"updatedAt":...}}
+
+# ── 鉴权（写操作） ────────────────────────────────────────────
+所有写接口依赖 _require_admin(authorization: Header)
+  → TAGS_ADMIN_TOKEN 非空时：校验 Authorization: Bearer <token>
+  → TAGS_ADMIN_TOKEN 为空时：跳过鉴权（适合内网部署）
 
 # ── 正向维度写操作 ────────────────────────────────────────────
 POST   /api/tags/config/positive
@@ -836,30 +844,37 @@ POST /api/tags/config/reset
   → _cfg_response(cfg)
 
 # ── 并发安全 ─────────────────────────────────────────────────
-_cfg_lock = asyncio.Lock()            ← 所有读写操作持有同一把锁，防止并发覆盖
+_cfg_lock = asyncio.Lock()            ← 定义在 tasks.py，所有读写操作共享
+
+# ── 热更新生效路径 ────────────────────────────────────────────
+写入 schemas/tag_config_runtime.json 后：
+  _tagger_load_cfg()（tag/tagger.py）   ← mtime 缓存：下次打标时自动重新加载
+  _conform_to_template()（postprocess.py）← 每次调用时动态构建 displayName 映射
 
 # ── 注意事项 ─────────────────────────────────────────────────
-tag_config_runtime.json 在容器内路径 /app/tag_config_runtime.json
-  → 若需跨容器重启持久化，需将其目录挂载为 volume
+schemas/tag_config_runtime.json 容器内路径 /app/schemas/tag_config_runtime.json
+  → 若需跨容器重启持久化，需将 /app/schemas 目录挂载为 volume
 tag_data.py（院校/大厂名单）修改后需重启服务才能生效（不在此链路内）
 ```
 
 #### 5.5.7 异步基础设施
 
 ```
-app.py 启动（lifespan）
-  _cleanup_uploads()                      ← 清理 uploads/ 目录过期文件（>15天）
-  asyncio.create_task(_periodic_cleanup()) ← 每60s清理过期 TaskRecord（TTL 10min）
+app.py lifespan()
+  parser.py  _cleanup_uploads()           ← 清理 uploads/ 目录过期文件（>15天）
+  asyncio.create_task(
+    tasks.py  _periodic_cleanup()         ← 每60s清理过期 TaskRecord（TTL 10min）
+  )
 
-app.py:1273  _set_task_field(task_id, **kwargs)
+tasks.py  _set_task_field(task_id, **kwargs)
   async with _task_lock:                  ← asyncio.Lock 协程安全
     setattr(rec, k, v)
 
-app.py:1281  _cleanup_task_store()
+tasks.py  _cleanup_task_store()
   cutoff = time.time() - TASK_TTL_MINUTES * 60
   [删除 created_at < cutoff 的记录]
 
-app.py:241  _llm_call(messages)
+parser.py  _llm_call(messages)
   client.chat.completions.create(
     model=MODEL_NAME,
     temperature=TEMPERATURE,             ← 0.01（低温保稳定性）
@@ -1271,9 +1286,10 @@ GET /api/tasks?status=3  ← 只返回"已完成"任务
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| `POST` | `/algorithm/resume/parse` | 同步解析 PDF，返回结构化简历 JSON |
 | `POST` | `/algorithm/positive-tag/extract` | 从已结构化简历提取正向标签 |
 | `POST` | `/algorithm/sensitive-tag/detect` | 负面标签/风险检测 |
+
+> 注：`/algorithm/resume/parse`（同步解析）已移除，全量解析请通过 `/api/resume/async/parse` 提交异步任务。
 
 ---
 
@@ -1608,12 +1624,16 @@ class ResumeResult(BaseModel):
 
 | 文件 | 职责 | 更新方式 |
 |------|------|---------|
-| `tag_config_runtime.json` | **运行时配置（优先）**：所有 CRUD 写操作的持久化目标 | `PUT/POST/DELETE /api/tags/config/*` 自动写入 |
-| `tag_config.py` | **默认配置（兜底）**：`runtime.json` 不存在时加载；`reset` 后回滚至此 | 手动编辑 + `POST /api/tags/config/reset` 重新生效 |
-| `tag_data.py` | 院校名单 Set、大厂名单 Set、行业词典 dict | 服务重启 |
-| `tag_static_data.json` | `tag_data.py` 的人工可读版本，修改后需同步 `tag_data.py` | 手动维护 |
+| `schemas/tag_config_runtime.json` | **运行时配置（优先）**：所有 CRUD 写操作的持久化目标 | `PUT/POST/DELETE /api/tags/config/*` 自动写入 |
+| `tag/tag_config.py` | **默认配置（兜底）**：`runtime.json` 不存在时加载；`reset` 后回滚至此 | 手动编辑 + `POST /api/tags/config/reset` 重新生效 |
+| `tag/tag_data.py` | 院校名单 Set、大厂名单 Set、行业词典 dict | 服务重启 |
+| `schemas/tag_static_data.json` | `tag_data.py` 的人工可读版本，修改后需同步 `tag_data.py` | 手动维护 |
 
 **优先级**：`tag_config_runtime.json` > `tag_config.py` > 服务默认值
+
+**热更新生效机制**：
+- `_tagger_load_cfg()`（`tag/tagger.py`）：mtime 缓存，仅当 `runtime.json` 文件变更时重新读取，避免每次打标重复 IO
+- `_conform_to_template()`（`postprocess.py`）：每次调用时动态调用 `load_tag_cfg()`，立即感知最新配置；`displayName` 查找表（`_build_display_maps`）无需重启即可生效
 
 ### 10.2 tag_static_data.json 结构
 
@@ -1755,7 +1775,7 @@ CREATE TABLE resume_tag_rel (
 ```python
 import time, requests
 
-HOST = "http://10.2.5.7:21801"
+HOST = "http://localhost:21804"  # 请替换为实际部署地址
 STATUS_DESC = {0: "待处理", 1: "简历解析中", 2: "标签打标中", 3: "任务完成", 4: "任务失败"}
 
 
@@ -1851,18 +1871,19 @@ else:
 
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `MODEL_SERVICE_URL` | `http://10.2.5.7:13001/v1` | LLM 服务地址 |
+| `MODEL_SERVICE_URL` | —（**必填**） | LLM 服务地址（OpenAI 兼容，无默认值，启动时强制校验） |
 | `MODEL_NAME` | `Qwen3.5-397B-A17B` | 模型名称 |
 | `MAX_WORKERS` | `24` | 线程池大小 |
 | `API_TIMEOUT` | `300` | LLM 调用超时（秒） |
 | `MAX_RETRIES` | `2` | LLM 失败重试次数 |
 | `TEMPERATURE` | `0.01` | LLM 温度（低温保证输出稳定） |
 | `MAX_TOKENS` | `4096` | 最大输出 token 数 |
-| `SERVICE_PORT` | `21801` | 服务端口 |
+| `SERVICE_PORT` | `21804` | 服务端口 |
 | `LOG_KEEP_DAYS` | `7` | 日志保留天数 |
 | `LOG_MAX_MB` | `50` | 单日志文件最大 MB |
 | `MAX_FILE_SIZE_MB` | `20` | 上传文件最大 MB |
 | `TASK_TTL_MINUTES` | `10` | 任务缓存 TTL（分钟） |
+| `TAGS_ADMIN_TOKEN` | `""（不鉴权）` | 打标配置写接口 Bearer Token；为空时跳过鉴权 |
 
 ---
 
@@ -1889,6 +1910,5 @@ else:
 | DELETE | `/api/tags/config/negative/{dimension}/rules/{ruleKey}` | 删除负向规则 | 新增 |
 | PUT | `/api/tags/config/severity` | 更新扣分权重 | 新增 |
 | POST | `/api/tags/config/reset` | 重置为默认配置 | 新增 |
-| POST | `/algorithm/resume/parse` | 内部：同步 OCR 解析 | 内部 |
 | POST | `/algorithm/positive-tag/extract` | 内部：正向标签提取 | 内部 |
 | POST | `/algorithm/sensitive-tag/detect` | 内部：负面标签检测 | 内部 |

@@ -14,11 +14,11 @@ from pathlib import Path
 
 import aiohttp
 
-HOST      = "http://localhost:21801"
-_BASE     = Path(__file__).parent
-TEST_DIR  = _BASE / "uploads" / "test_full"
+HOST       = "http://localhost:21804"
+_BASE      = Path(__file__).parent.parent   # 项目根目录
+TEST_DIR   = _BASE / "uploads"
 RESULT_DIR = _BASE / "results" / "stress_test"
-LOG_DIR   = _BASE / "logs"
+LOG_DIR    = _BASE / "logs"
 
 STATUS_DESC = {0: "待处理", 1: "解析中", 2: "打标中", 3: "完成", 4: "失败"}
 

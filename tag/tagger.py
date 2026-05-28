@@ -3,7 +3,6 @@
 """
 import re
 import json
-import logging
 import pathlib
 import json_repair
 from datetime import datetime
@@ -15,103 +14,36 @@ from .tag_data import (
     EDUCATION_HIERARCHY,
 )
 from .tag_config import POSITIVE_DIMENSIONS, NEGATIVE_DIMENSIONS, SEVERITY_DEDUCTION
+from prompts import POSITIVE_TAG_PROMPT_TPL, POSITIVE_TAG_SCHEMA, TAGGER_SYSTEM
+from config import logger  # 统一使用带 ContextVar 上下文的 logger
 
-logger = logging.getLogger("aihr")
+_RUNTIME_CFG_FILE = pathlib.Path(__file__).parent.parent / "schemas" / "tag_config_runtime.json"
 
-_RUNTIME_CFG_FILE = pathlib.Path(__file__).parent / "tag_config_runtime.json"
+# mtime 缓存：只在文件真正修改后才重新读取，stat() 极轻量，避免每次打标都做 JSON 反序列化
+_cfg_cache: dict = {}
+_cfg_cache_mtime: float = -1.0
 
 
 def _tagger_load_cfg() -> dict:
-    """读取运行时配置：优先 JSON 文件，回退到 tag_config 默认值。"""
+    """读取运行时配置（mtime 缓存：文件未修改时直接返回上次结果，避免并发时重复 IO）。"""
+    global _cfg_cache, _cfg_cache_mtime
     if _RUNTIME_CFG_FILE.exists():
+        mtime = _RUNTIME_CFG_FILE.stat().st_mtime
+        if _cfg_cache and mtime == _cfg_cache_mtime:
+            return _cfg_cache
         with open(_RUNTIME_CFG_FILE, encoding="utf-8") as f:
-            return json.load(f)
-    return {
-        "positiveDimensions": POSITIVE_DIMENSIONS,
-        "negativeDimensions": NEGATIVE_DIMENSIONS,
-        "severityDeduction":  dict(SEVERITY_DEDUCTION),
-    }
+            _cfg_cache = json.load(f)
+        _cfg_cache_mtime = mtime
+    else:
+        _cfg_cache = {
+            "positiveDimensions": POSITIVE_DIMENSIONS,
+            "negativeDimensions": NEGATIVE_DIMENSIONS,
+            "severityDeduction":  dict(SEVERITY_DEDUCTION),
+        }
+        _cfg_cache_mtime = -1.0
+    return _cfg_cache
 
 # ── 正向标签提取 ──────────────────────────────────────────────────
-
-_POSITIVE_TAG_PROMPT_TPL = """你是专业的 HR 招聘评估助手。根据候选人简历，提取结构化正向标签。
-
-## 输入
-### 候选人简历（已结构化）
-{resume_json}
-
-### 目标岗位参考
-- 职位：{job_title}
-- 必要技能：{required_skills}
-- 岗位描述：{job_description}
-
-## 输出要求
-输出以下 JSON，禁止添加说明文字或 markdown 标记。
-所有维度均使用数组字段，命名规则：{{dimension}}ValueArray。
-
-{{{{
-  "positiveTags": [
-    {{{{
-      "dimension": "education",
-      "educationValueArray": ["<{edu_values}>", "...更多适用等级"],
-      "source": "ai"
-    }}}},
-    {{{{
-      "dimension": "companyBg",
-      "companyBgValueArray": ["<{company_bg_values}>", "..."],
-      "source": "ai",
-      "confidence": <0.0-1.0>
-    }}}},
-    {{{{
-      "dimension": "workYears",
-      "workYearsValueArray": ["<{work_years_values}>"],
-      "source": "ai"
-    }}}},
-    {{{{
-      "dimension": "skills",
-      "skillsValueArray": ["技能1", "技能2", "..."],
-      "source": "ai"
-    }}}},
-    {{{{
-      "dimension": "industry",
-      "industryValueArray": ["行业1", "行业2"],
-      "source": "ai",
-      "confidence": <0.0-1.0>
-    }}}}
-  ],
-  "confidence": <所有positiveTags中confidence字段的均值，保留2位小数>
-}}}}
-
-## 各维度打标规则
-
-**education**（educationValueArray 为字符串数组，无 confidence，并行输出所有适用等级）
-- 候选值：{edu_values}
-- 层级关系：C9 ⊂ 985 ⊂ 211 ⊂ 双一流，命中高级别需同时输出下级标签
-  - 若学校属于 C9，输出 ["C9","985","211","双一流"]
-  - 若学校属于 985（非 C9），输出 ["985","211","双一流"]
-  - 若学校属于 211（非 985），输出 ["211","双一流"]
-- 海外：QS前50 → ["海外名校(QS50)","海外名校(QS100)"]；QS51-100 → ["海外名校(QS100)"]
-- 未命中任何院校层级时，按最高学历补充：博士研究生→"博士"，硕士研究生→"硕士"，本科→"本科"，专科及以下→"专科及以下"
-- 遍历所有 educations[].school，合并去重后输出
-- 禁止输出候选值以外的值（如"博士研究生"、"硕士研究生"应映射为"博士"/"硕士"）
-
-**companyBg**（companyBgValueArray 为字符串数组，携带整体 confidence，单条记录）
-- 候选值：{company_bg_values}
-- 头部大厂：阿里/腾讯/字节/百度/华为/美团/京东/拼多多/网易/快手/小红书
-- confidence 取所有匹配项的最高值
-
-**workYears**（workYearsValueArray 为单元素字符串数组，无 confidence，从 works[] 计算累计年限后映射）
-- 候选值：{work_years_values}
-- 0-1年→应届 / 1-3年→2-3年 / 3-5年→3-5年 / 5-10年→5-10年 / 10-15年→10-15年 / 15年+→15年+
-
-**skills**（skillsValueArray 为字符串数组，无 confidence）
-- 合并 works[].description + projects[].description 提取核心技术栈
-- 去重、归一化（如"python"→"Python"），按职能大类（前端/后端/数据/AI/移动端/运维/产品/管理）归集
-
-**industry**（industryValueArray 为字符串数组，携带整体 confidence，单条记录）
-- 从公司业务和项目描述推断，最多输出2个行业
-- 候选值：{industry_values}
-- confidence 取所有命中行业的最高值"""
 
 
 def _build_positive_prompt(pos_dims: list, resume_json: str,
@@ -124,15 +56,16 @@ def _build_positive_prompt(pos_dims: list, resume_json: str,
                 return "|".join(v for v in (d.get("allowedValues") or []) if v)
         return ""
 
-    return _POSITIVE_TAG_PROMPT_TPL.format(
-        edu_values=_pipe("education"),
-        company_bg_values=_pipe("companyBg"),
-        work_years_values=_pipe("workYears"),
-        industry_values=_pipe("industry"),
+    return POSITIVE_TAG_PROMPT_TPL.format(
         resume_json=resume_json,
         job_title=job_title,
         required_skills=required_skills,
         job_description=job_description,
+        schema_example=json.dumps(POSITIVE_TAG_SCHEMA, ensure_ascii=False, indent=2),
+        edu_values=_pipe("education"),
+        company_bg_values=_pipe("companyBg"),
+        work_years_values=_pipe("workYears"),
+        industry_values=_pipe("industry"),
     )
 
 
@@ -398,8 +331,10 @@ def extract_positive_tags_llm(resume: dict, job_info: dict, llm_call_fn) -> dict
     LLM 层正向标签提取，失败时降级到规则层。
     llm_call_fn: 接受 messages list，返回字符串
     """
-    pos_dims = _tagger_load_cfg()["positiveDimensions"]
-    prompt = _build_positive_prompt(
+    # 配置只读一次，避免同一调用链多次 IO
+    cfg      = _tagger_load_cfg()
+    pos_dims = cfg["positiveDimensions"]
+    prompt   = _build_positive_prompt(
         pos_dims,
         resume_json=json.dumps(resume, ensure_ascii=False, indent=2),
         job_title=job_info.get("jobTitle", ""),
@@ -408,14 +343,13 @@ def extract_positive_tags_llm(resume: dict, job_info: dict, llm_call_fn) -> dict
     )
     try:
         raw = llm_call_fn([
-            {"role": "system", "content": "你是专业的 HR 招聘评估助手，只输出 JSON。"},
+            {"role": "system", "content": TAGGER_SYSTEM},
             {"role": "user",   "content": prompt},
         ])
         result = json_repair.loads(raw)
         if isinstance(result, dict) and "positiveTags" in result:
             result["positiveTags"] = _normalize_positive_tags(
-                result["positiveTags"], resume,
-                _tagger_load_cfg()["positiveDimensions"],
+                result["positiveTags"], resume, pos_dims  # 复用已读取的配置，不重复 IO
             )
             confs = [t["confidence"] for t in result["positiveTags"] if "confidence" in t]
             result["confidence"] = round(sum(confs) / len(confs), 2) if confs else 0.70
