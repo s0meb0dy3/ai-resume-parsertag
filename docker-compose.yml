@@ -1,0 +1,20 @@
+services:
+  aihr-aipdf:
+    build: .
+    image: aihr-aipdf:latest
+    container_name: aihr-aipdf
+    restart: unless-stopped
+    ports:
+      - "21804:21804"
+    env_file: .env
+    volumes:
+      - ./logs:/app/logs
+      - ./uploads:/app/uploads
+      - ./results:/app/results
+      - ./schemas/tag_config_runtime.json:/app/schemas/tag_config_runtime.json
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:21804/health')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3

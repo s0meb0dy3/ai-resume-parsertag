@@ -30,9 +30,10 @@ EXPOSE 21804
 # 此处只保留容器必要的系统默认值，避免敏感信息烘焙进镜像层
 ENV UPLOAD_DIR=/app/uploads \
     RESULT_DIR=/app/results \
+    LOG_DIR=/app/logs \
     SERVICE_PORT=21804
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:21804/health')" || exit 1
+  CMD sh -c "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:${SERVICE_PORT}/health')\"" || exit 1
 
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "21804"]
+CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port ${SERVICE_PORT:-21804}"]
