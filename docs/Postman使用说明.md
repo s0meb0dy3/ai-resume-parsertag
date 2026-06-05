@@ -16,17 +16,18 @@
 | **03** | **POST** | `/api/resume/async/batch` | **批量简历提交（MinIO URL）** |
 | **04** | **GET** | `/api/resume/async/result?taskId=` | **轮询单个任务结果** |
 | **05** | **GET** | `/api/tasks` | **任务总览（全部任务状态）** |
-| 06 | GET | `/api/tags/config` | 查询标签配置 |
-| 07 | POST | `/api/tags/config/positive` | 新增正向维度 🔒 |
-| 08 | PUT | `/api/tags/config/positive/{dimension}` | 更新正向维度 🔒 |
-| 09 | DELETE | `/api/tags/config/positive/{dimension}` | 删除正向维度 🔒 |
-| 10 | PUT | `/api/tags/config/negative/{dimension}` | 更新负向维度 🔒 |
-| 11 | POST | `/api/tags/config/negative/{dimension}/rules` | 新增负向规则 🔒 |
-| 12 | PUT | `/api/tags/config/negative/{dimension}/rules/{ruleKey}` | 更新负向规则 🔒 |
-| 13 | DELETE | `/api/tags/config/negative/{dimension}/rules/{ruleKey}` | 删除负向规则 🔒 |
-| 14 | PUT | `/api/tags/config/severity` | 更新扣分权重 🔒 |
-| 15 | POST | `/api/tags/config/reset` | 重置为默认配置 🔒 |
-| 16 | POST | `/v1/chat/completions` | OpenAI 兼容层（OneAPI 转发） |
+| **06** | **POST** | `/api/resume/sync/batch` | **同步批量解析+打标（直接返回完整结果）** |
+| 07 | GET | `/api/tags/config` | 查询标签配置 |
+| 08 | POST | `/api/tags/config/positive` | 新增正向维度 🔒 |
+| 09 | PUT | `/api/tags/config/positive/{dimension}` | 更新正向维度 🔒 |
+| 10 | DELETE | `/api/tags/config/positive/{dimension}` | 删除正向维度 🔒 |
+| 11 | PUT | `/api/tags/config/negative/{dimension}` | 更新负向维度 🔒 |
+| 12 | POST | `/api/tags/config/negative/{dimension}/rules` | 新增负向规则 🔒 |
+| 13 | PUT | `/api/tags/config/negative/{dimension}/rules/{ruleKey}` | 更新负向规则 🔒 |
+| 14 | DELETE | `/api/tags/config/negative/{dimension}/rules/{ruleKey}` | 删除负向规则 🔒 |
+| 15 | PUT | `/api/tags/config/severity` | 更新扣分权重 🔒 |
+| 16 | POST | `/api/tags/config/reset` | 重置为默认配置 🔒 |
+| 17 | POST | `/v1/chat/completions` | OpenAI 兼容层（OneAPI 转发） |
 
 > 🔒 标注的接口为写操作，需在 Header 中添加 `Authorization: Bearer <TAGS_ADMIN_TOKEN>`（服务未配置 `TAGS_ADMIN_TOKEN` 时可跳过）
 
@@ -612,7 +613,148 @@ POST /api/tags/config/reset
 
 ---
 
-## 九、接口 16 — OpenAI 兼容层（OneAPI 转发）
+## 六B、接口 06 — 同步批量解析+打标
+
+```
+POST /api/resume/sync/batch
+Content-Type: application/json
+```
+
+**区别于异步接口**：提交后 **阻塞等待全部完成**，直接返回每份简历的完整解析+打标结果，无需轮询。适合离线批处理、脚本集成等场景；在线并发场景推荐使用接口 03（异步）。
+
+### Postman 操作
+
+1. Body → **raw** → 右侧下拉选 **JSON**
+2. 粘贴以下请求体
+
+### 请求体
+
+```json
+{
+  "resumes": [
+    {
+      "type": "url",
+      "file": {
+        "name": "31岁-5年经验-证券事务代表-猎聘简历.pdf",
+        "path": "http://host.docker.internal:9000/resumes/31%E5%B2%81-5%E5%B9%B4%E7%BB%8F%E9%AA%8C-%E8%AF%81%E5%88%B8%E4%BA%8B%E5%8A%A1%E4%BB%A3%E8%A1%A8-%E7%8C%8E%E8%81%98%E7%AE%80%E5%8E%86.pdf",
+        "extra": "userId_001"
+      }
+    },
+    {
+      "type": "file",
+      "file": {
+        "name": "PKU刘旗简历.pdf",
+        "path": "/app/uploads/PKU刘旗简历.pdf"
+      }
+    }
+  ],
+  "jobTitle": "证券事务代表",
+  "requiredSkills": "信息披露,三会运作,投资者关系",
+  "jobDescription": "负责上市公司证券事务管理",
+  "jobSensitiveWords": "",
+  "max_concurrency": 4
+}
+```
+
+### 请求字段说明
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|:----:|------|
+| `resumes` | Array | ✅ | 简历列表，每项必须含 `type` 字段 |
+| `resumes[].type` | string | ✅ | `url` / `file` / `base64` 三选一 |
+| `resumes[].file.name` | string | ✅ | 文件名（含扩展名），用于日志标识 |
+| `resumes[].file.path` | string | `url`/`file` 时必填 | MinIO URL 或容器内绝对路径 |
+| `resumes[].file.content` | string | `base64` 时必填 | PDF 文件 Base64 编码字符串 |
+| `resumes[].file.extra` | string | ✗ | 透传字段，原样返回（可存业务 ID） |
+| `jobTitle` | string | ✗ | 目标岗位名称 |
+| `requiredSkills` | string | ✗ | 必要技能，逗号分隔 |
+| `jobDescription` | string | ✗ | JD 全文 |
+| `jobSensitiveWords` | string | ✗ | 自定义敏感词，逗号/分号分隔 |
+| `max_concurrency` | int | ✗ | 并发数上限 1~30，默认同 `MAX_WORKERS`（24） |
+
+> **单次上限 50 份**；任务提交后同步阻塞，完整耗时 = 最慢一份的处理时间（并发执行）
+
+### 响应格式
+
+外层包含汇总统计，`results` 数组中每条结构与 `GET /api/resume/async/result`（status=3）的 `data` 字段**完全一致**：
+
+```json
+{
+  "total": 2,
+  "success": 2,
+  "failed": 0,
+  "elapsed_s": 42.5,
+  "results": [
+    {
+      "code": 0,
+      "msg": "success",
+      "data": {
+        "taskId": "aaa-111",
+        "status": 3,
+        "statusDesc": "任务完成",
+        "elapsedSeconds": 41.2,
+        "estimatedSeconds": 90,
+        "extra": "userId_001",
+        "result": {
+          "taskId": "aaa-111",
+          "resumeParseFinishTime": "2026-06-05 15:27:24",
+          "tagParseFinishTime": "2026-06-05 15:27:31",
+          "candidate": { "name": "姚先生", "age": 31, "...": "..." },
+          "educations": [ "..." ],
+          "works": [ "..." ],
+          "projects": [],
+          "positiveTags": { "tagsArray": [ "..." ] },
+          "negativeTags": { "hitCount": 0, "deductionScore": 0, "tagsArray": [] }
+        }
+      }
+    },
+    {
+      "code": 0,
+      "msg": "success",
+      "data": { "taskId": "bbb-222", "status": 3, "...": "..." }
+    }
+  ]
+}
+```
+
+**失败时（文件下载失败 / 解析异常）单条结果：**
+
+```json
+{
+  "code": 1,
+  "msg": "无法获取 PDF，请检查 type/path/content 字段",
+  "data": {
+    "taskId": null,
+    "status": 4,
+    "statusDesc": "任务失败",
+    "elapsedSeconds": 0,
+    "estimatedSeconds": 90,
+    "extra": null,
+    "errorMsg": "无法获取 PDF，请检查 type/path/content 字段"
+  }
+}
+```
+
+### 三种 type 输入示例
+
+**type=url（MinIO / HTTP）**
+```json
+{"type": "url", "file": {"name": "张三.pdf", "path": "http://host.docker.internal:9000/resumes/PKU%E5%88%98%E6%97%97%E7%AE%80%E5%8E%86.pdf", "extra": "投递ID_001"}}
+```
+
+**type=file（容器内本地文件）**
+```json
+{"type": "file", "file": {"name": "张三.pdf", "path": "/app/uploads/PKU刘旗简历.pdf"}}
+```
+
+**type=base64**
+```json
+{"type": "base64", "file": {"name": "张三.pdf", "content": "JVBERi0xLjQ..."}}
+```
+
+---
+
+## 九、接口 17 — OpenAI 兼容层（OneAPI 转发）
 
 ```
 POST /v1/chat/completions

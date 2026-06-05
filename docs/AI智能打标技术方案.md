@@ -334,7 +334,8 @@ SEVERITY_DEDUCTION = {"low": -5, "medium": -10, "high": -20}
     ├─ POST /api/resume/async/parse            ← 单文件异步上传（multipart）
     ├─ POST /api/resume/async/batch            ← 批量异步（JSON，type=url，≤20份）
     ├─ POST /api/resume/async/batch/multiform  ← 批量异步（files + urls 混合，≤20份）
-    └─ GET  /api/resume/async/result           ← 轮询结果
+    ├─ GET  /api/resume/async/result           ← 轮询结果
+    └─ POST /api/resume/sync/batch             ← 同步批量（url/file/base64，≤50份，阻塞等待）
 
 AIHR Python 服务（FastAPI v3.1.0，端口 21804）
     │
@@ -404,15 +405,398 @@ LLM 正向打标失败（超时 / 网络 / JSON 修复失败）
         （skills 仅 LLM 可提取，降级时不输出）
 ```
 
-### 4.4 日志输出结构
+### 4.4 日志系统
 
-每次异步任务完成，日志文件中连续输出三段结构化日志块：
+#### 4.4.1 文件存储结构
 
-| 序号 | 日志块 | 内容 |
-|------|--------|------|
-| ① | `解析结果 文件: xxx 耗时: Ns` | 候选人基础信息 / 教育 / 工作 / 项目 + 完整解析 JSON |
-| ② | `打标结果 文件: xxx taskId: xxx` | 5维正向标签（含置信度）/ 风险标签列表 / 整体置信度 / 扣分合计 |
+日志按功能级别和月份分目录归档，`backupCount=0` 永久保留，防止 inode 耗尽：
+
+```
+logs/                                     ← LOG_DIR 环境变量控制（默认 ./logs）
+├── debug/
+│   └── YYYY-MM/
+│       └── debug_YYYY-MM-DD_<pid>.log   ← 全量日志（DEBUG 级别及以上）
+└── error/
+    └── YYYY-MM/
+        └── error_YYYY-MM-DD_<pid>.log   ← 仅 ERROR 级别
+```
+
+**轮转规则**（`_SizeTimedRotatingFileHandler`，标准 `TimedRotatingFileHandler` 扩展）：
+- 时间轮转：每天零点（`when="midnight"`）创建新文件
+- 大小轮转：单文件超过 `max_bytes`（默认 50MB）时立即触发，防止单文件无限增长
+- 两者叠加：大小触发优先，时间轮转每天保底执行一次
+
+文件名格式：`debug_2026-06-02_<pid>.log`，`<pid>` 默认为进程 PID，生产环境可通过 `log_pid: aihr` 改为固定服务名，便于多实例日志归并。
+
+#### 4.4.2 日志格式
+
+**文本格式（默认，`json_format: false`）**
+
+```
+2026-06-02 10:30:45 | INFO  | [a1b2c3d4] [简历解析] [张三.pdf] [-] | [parser.py:128 _log_result] | 解析结果 文件: 张三.pdf 耗时: 32s
+```
+
+| 字段 | 示例 | 说明 |
+|------|------|------|
+| 时间 | `2026-06-02 10:30:45` | 北京时间（CST=UTC+8），`Formatter.converter` 强制注入，不依赖容器 TZ 环境变量 |
+| 级别 | `INFO` | DEBUG / INFO / WARNING / ERROR / CRITICAL |
+| request_id | `a1b2c3d4` | 8 位十六进制，每个 HTTP 请求唯一，中间件 `_reset_log_context` 自动生成注入 |
+| business_type | `简历解析` | 业务类型标识（简历解析 / 打标 / batch 等） |
+| filename_ctx | `张三.pdf` | 当前处理的文件名 |
+| 扩展字段 | `-` | `set_extra_context()` 注入的自定义 key=value；无时显示 `-` |
+| 代码位置 | `parser.py:128 _log_result` | 文件名:行号 函数名 |
+| 消息 | 日志正文 | 业务内容 |
+
+控制台附带 ANSI 颜色（`coloredlogs`），文件输出纯文本，两者格式字符串相同。
+
+**JSON 格式（`json_format: true`，适配 K8s/ELK/Loki/Fluentd）**
+
+```json
+{"ts": "2026-06-02T10:30:45", "level": "INFO", "request_id": "a1b2c3d4", "business_type": "简历解析", "filename_ctx": "张三.pdf", "caller": "parser.py:128:_log_result", "msg": "解析结果 文件: 张三.pdf"}
+```
+
+每行一条单行 JSON，无需正则即可被 ELK Logstash / Fluentd / Loki 直接解析字段；`set_extra_context()` 注入的 key-value 作为顶层字段展开，便于按字段过滤。
+
+#### 4.4.3 请求上下文传播
+
+每个 HTTP 请求进入时，`_reset_log_context` 中间件自动设置三个上下文字段，整条调用链（包括线程池）均自动携带，无需手动传参：
+
+| 字段 | 说明 | 设置时机 |
+|------|------|---------|
+| `request_id` | 8 位十六进制，每请求自动生成 | 中间件入口 |
+| `business_type` | 业务类型标识 | 请求入口（解析 / 打标 / batch） |
+| `filename` | 当前处理文件名 | 任务启动时 |
+
+**双轨传播机制**（`_ContextFilter` 实现）：
+- asyncio 协程：`ContextVar` 天然隔离，不同协程的请求上下文互不干扰
+- ThreadPoolExecutor 线程：`wrap_for_executor(fn)` 在「调用时」捕获 ContextVar 快照注入线程，线程池线程复用时不串台
+
+优先级：`ContextVar`（asyncio）> `threading.local`（线程兜底）> 默认值 `-`
+
+`_ContextFilter` 挂在 logger 层（而非 handler 层），每条 LogRecord 只执行一次上下文注入，不随 handler 数量线性增加。
+
+#### 4.4.4 每次任务的三段日志块
+
+每个异步任务完成后，`debug/` 日志中连续输出三段结构化内容（`tasks.py` 流水线尾部触发）：
+
+| 序号 | 日志块标题 | 内容 |
+|------|-----------|------|
+| ① | `解析结果 文件: xxx 耗时: Ns` | 候选人基础信息（姓名/手机/邮箱）/ 教育经历摘要 / 工作经历摘要 / 项目经历摘要 + 完整解析 JSON |
+| ② | `打标结果 文件: xxx taskId: xxx` | 5 维正向标签（含置信度）/ 风险标签列表 / 整体置信度 / 扣分合计 |
 | ③ | `完整输出 JSON 文件: xxx taskId: xxx` | v3.1 格式完整 JSON（与接口返回完全一致） |
+
+三段日志均写入 `debug/` 目录；同时 `parser._save_result()` 将完整 JSON 落盘到 `results/` 目录，服务重启后内存缓存清空时可人工追溯。
+
+#### 4.4.5 results/ 目录
+
+每个完成的任务同步写入磁盘文件，格式为：
+
+```
+results/
+└── 20260602_103045_张三_e39d009b.json   ← <日期时间>_<姓名>_<taskId 前8位>.json
+```
+
+文件内容与接口返回的 `data.result` 完全一致（v3.1 JSON）。用途：审计追溯 / 服务重启后补查历史结果 / 对比接口返回与磁盘文件一致性。
+
+> 注意：`results/` 目录不做自动清理，需运维手动或定时任务维护磁盘占用。`uploads/` 目录超过 15 天的文件由服务启动时的 `_cleanup_uploads()` 自动清理。
+
+#### 4.4.6 噪音过滤
+
+`_NoiseFilter` 过滤以下 uvicorn.access 日志，避免健康检查探针污染业务日志：
+
+- `GET /health`
+- `HEAD /health`
+- `GET /favicon.ico`
+
+过滤器绑定到 `uvicorn.access` logger，不影响业务 logger 的其他日志。
+
+#### 4.4.7 配置与热更新
+
+**配置文件**：`log_config.yml`（服务根目录），watchdog 监听文件变化，200ms 防抖后自动重新加载，无需重启即可调整日志级别或切换格式。
+
+```yaml
+log_config:
+  name: aihr                   # logger 名称（logging.getLogger(name) 全局访问）
+  log_level_console: INFO      # 控制台级别；INFO 过滤 DEBUG 噪音（健康检查等）
+  log_level_file: DEBUG        # 文件输出级别；通常保持 DEBUG
+  log_folder: logs             # 日志根目录（相对路径基于服务根目录）
+  log_pid: ""                  # 文件名标识；空 = 进程 PID；生产建议填 aihr
+  max_bytes: 52428800          # 单文件大小上限（50MB）；0 = 不限
+  use_queue: false             # Gunicorn 多 worker 时设为 true
+  json_format: false           # true = 单行 JSON（ELK/Loki 场景）；false = 带颜色文本
+```
+
+**环境变量覆盖**（优先级高于配置文件）
+
+| 变量 | 说明 |
+|------|------|
+| `LOG_LEVEL` | 同时覆盖控制台和文件日志级别（K8s ConfigMap 临时调整场景常用） |
+| `LOG_DIR` | 日志根目录（覆盖 `log_folder`） |
+| `LOG_KEEP_DAYS` | 日志保留天数（供外部清理脚本使用，服务本身不做自动清理） |
+| `LOG_MAX_MB` | 单文件大小上限（MB），覆盖 `max_bytes` |
+| `LOG_CONFIG_PATH` | 指定配置文件路径（K8s ConfigMap 挂载路径场景） |
+
+**Gunicorn 多 worker 模式**（`use_queue: true`）：启用 `QueueHandler → QueueListener` 异步写文件，单一队列消费者在后台线程分流到 debug/error handler，消除多 worker 同时写同一文件的竞争条件；原版双 QueueHandler 双写问题已修复。
+
+**第三方 logger 接管**：uvicorn / httpx / sqlalchemy 等第三方 logger 统一接管到同一套 handler，控制台与文件输出格式一致；列表可通过 `log_config.third_party_loggers` 覆盖。
+
+#### 4.4.8 logger_manager 在业务中的集成方式
+
+##### 导入层级
+
+`logger_manager.py` 不直接被业务模块导入，而是由 `config.py` 统一转发：
+
+```
+logger_manager.py
+   └── config.py（re-export）
+         ├── logger              ← 全局 Logger 单例（懒加载）
+         ├── set_log_context     ← 注入 request_id / business_type / filename
+         ├── wrap_for_executor   ← 线程池 ContextVar 快照包装
+         ├── get_logger_manager  ← 获取 LoggerManager 单例（lifespan 使用）
+         └── set_extra_context   ← 注入自定义扩展字段
+```
+
+业务模块统一写 `from config import logger, set_log_context`，`parser.py` 例外（直接 `from logger_manager import logger`，原因：parser 不依赖 config 中的环境变量转发即可工作）。
+
+##### 生命周期管理（app.py lifespan）
+
+```python
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    lm = get_logger_manager()
+    lm.start_config_watcher()   # ① 启动 watchdog，监听 log_config.yml 热更新
+    _cleanup_uploads()
+    cleanup_task = asyncio.create_task(_periodic_cleanup())
+    yield
+    cleanup_task.cancel()
+    executor.shutdown(wait=False)
+    lm.stop_config_watcher()    # ② 停止 watchdog（5s 超时保护）
+    lm.stop_queue_listener()    # ③ 停止 QueueListener，确保缓冲日志落盘
+```
+
+服务启动时启动配置监听器，关闭时按顺序停止监听器和队列写入器，保证日志无丢失。
+
+##### 请求上下文注入（app.py 中间件）
+
+```python
+@app.middleware("http")
+async def _reset_log_context(request: Request, call_next):
+    # 每个请求入口重置 thread-local，防止前一请求的上下文泄漏到探针/系统日志
+    _thread_local.request_id    = "-"
+    _thread_local.business_type = "-"
+    _thread_local.filename      = "-"
+    return await call_next(request)
+```
+
+中间件只做重置（兜底）；实际上下文字段由业务代码在流水线入口显式注入。
+
+##### 流水线上下文注入与线程传播（tasks.py）
+
+`_run_parse_and_tag` 在每个阶段开始前调用 `set_log_context`，再用 `wrap_for_executor` 将快照传入线程池：
+
+```python
+# 阶段一：简历解析
+set_log_context(request_id=task_id[:8], business_type="简历解析", filename=filename)
+# ↑ 必须在 wrap_for_executor 之前调用，copy_context() 才能捕获正确快照
+async with _parse_semaphore:
+    await _set_task_field(task_id, status=1)
+    resume = await loop.run_in_executor(
+        executor, wrap_for_executor(_parse_with_logging), source, filename
+    )
+
+# 阶段二：标签打标（上下文切换为"标签打标"）
+set_log_context(request_id=task_id[:8], business_type="标签打标", filename=filename)
+await _set_task_field(task_id, status=2)
+tag_info = await loop.run_in_executor(
+    executor, wrap_for_executor(lambda: run_tagging(resume, job_info, llm_call_fn=_llm_call))
+)
+```
+
+**关键约束**：`set_log_context` 必须在 `wrap_for_executor` 之前调用，`copy_context()` 才能捕获正确的 ContextVar 快照；线程池中的子线程通过 `ctx.run(fn)` 继承该快照，整条链路日志均携带正确的 `request_id / business_type / filename`。
+
+##### 三段日志块的具体写入点
+
+| 序号 | 写入位置 | 函数 | 日志级别 |
+|------|---------|------|---------|
+| ① 解析结果 | `parser.py` | `_log_result()` ← 由 `_parse_with_logging()` 调用 | `INFO`（摘要）/ `DEBUG`（完整 JSON） |
+| ② 打标结果 | `tasks.py` | `_log_tag_info()` ← 由 `_run_parse_and_tag()` 调用 | `INFO` |
+| ③ 完整响应 | `tasks.py` | `_run_parse_and_tag()` 内联 `logger.debug` | `DEBUG` |
+
+**第①段**（`parser._log_result`）用 `├─` 盒子格式输出：
+
+```
+┌────────────────────────────────────────────────────────────
+│ 解析结果  文件: 张三.pdf  耗时: 32.15s
+├──── 基本信息 ────────────────────────
+│  姓名: 张三  性别: 男  年龄: 28  电话: 138xxxxxxxx
+│  邮箱: ...  地址: 广东省深圳市南山区  ...
+├──── 教育经历(1) ──────────────────────
+│  上海交通大学  计算机科学  硕士研究生 / 硕士  2017-09 ~ 2020-07
+├──── 工作经历(2) ──────────────────────
+│  [高级后端工程师]  字节跳动  2022-03 ~ 至今
+│    负责推荐系统...
+├──── 项目经历(1) ──────────────────────
+│  [技术负责人]  实时推荐引擎重构  ...
+├──── 完整简历 JSON ──────────────────── （DEBUG 级别）
+│  { "candidate": {...}, ... }
+└────────────────────────────────────────────────────────────
+```
+
+**第②段**（`tasks._log_tag_info`）：
+
+```
+┌────────────────────────────────────────────────────────────
+│ 打标结果  文件: 张三.pdf  taskId: e39d009b-...
+│ 简历解析: 2026-06-02 10:30:45  打标耗时: 8.3s  全程: 40.5s
+├──── 正向标签(5) ────────────────────────
+│  [education    ] 985, 211, 双一流, 硕士
+│  [companyBg    ] 头部大厂  置信度=0.95
+│  [workYears    ] 3-5年
+│  [skills       ] Java, Spring Boot, MySQL, Redis  置信度=0.92
+│  [industry     ] 互联网/电商, 人工智能  置信度=0.88
+│  整体置信度: 0.92
+├──── 风险标签(0) ────────────────────────
+│  无风险标签命中
+│  标签打标时间: 2026-06-02 10:31:08
+└────────────────────────────────────────────────────────────
+```
+
+**第③段**（`tasks` 内联 `logger.debug`）：完整 v3.1 JSON，格式同接口返回，每行前缀 `│  `。
+
+##### 磁盘持久化（parser._save_result）
+
+流水线末尾、`status→3` 之前，`_save_result` 将完整 JSON 写入 `results/` 目录：
+
+```python
+def _save_result(task_id: str, filename: str, result: dict):
+    stem      = Path(filename).stem[:40]
+    safe_stem = "".join(c if c.isalnum() or c in "-_." else "_" for c in stem)
+    ts        = datetime.now().strftime("%Y%m%d_%H%M%S")
+    out_path  = RESULT_DIR / f"{ts}_{safe_stem}_{task_id[:8]}.json"
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(result, f, ensure_ascii=False, indent=2)
+    logger.info(f"结果已保存: {out_path.name}")
+```
+
+文件名示例：`20260602_103045_张三_e39d009b.json`，`RESULT_DIR` 由环境变量 `RESULT_DIR` 控制（Dockerfile 默认 `/app/results`）。
+
+##### 其他业务日志点
+
+| 位置 | 触发条件 | 级别 | 内容 |
+|------|---------|------|------|
+| `parser._llm_call` | thinking block 签名错误 | `WARNING` | 去掉 thinking 参数重试提示 |
+| `parser.run` | 大页面分批模式 | `DEBUG` | 分批数量 / 批大小 / schema 修正明细 |
+| `parser._cleanup_uploads` | uploads 清理完成 / 失败 | `INFO` / `WARNING` | 删除文件数 / 失败文件名 |
+| `tasks._cleanup_task_store` | TTL 到期清理 | `INFO` | 清理过期任务数量 |
+| `tasks._run_parse_and_tag` | 阶段一完成 | `INFO` | `[taskId] 阶段一完成，耗时 Ns` |
+| `tasks._run_parse_and_tag` | 任务失败 | `ERROR` | `[taskId] 任务失败: <异常信息>` |
+
+#### 4.4.9 日志采集
+
+服务同时维护两条日志输出路径，部署模式不同，采集方式也不同。
+
+**两条输出路径**
+
+| 路径 | 输出目标 | 控制开关 |
+|------|---------|---------|
+| 文件 | `logs/debug/` + `logs/error/`（分级归档） | 始终写入 |
+| stdout | uvicorn 进程标准输出（app logger + uvicorn.access） | `to_console: true`（默认开启） |
+
+---
+
+**Docker Compose 部署 — 文件采集**
+
+`docker-compose.yml` 将 `./logs:/app/logs` 挂载到宿主机，日志文件在宿主机可直接读写：
+
+```
+宿主机 ./logs/
+├── debug/YYYY-MM/debug_<date>_<pid>.log   ← 全量，Filebeat / Fluentd 采集
+└── error/YYYY-MM/error_<date>_<pid>.log   ← 仅 ERROR，告警场景
+```
+
+**Filebeat 配置示例（文本格式）**
+
+```yaml
+filebeat.inputs:
+  - type: log
+    paths:
+      - /path/to/aihr/logs/debug/*/*.log
+    multiline:
+      pattern: '^\d{4}-\d{2}-\d{2}'   # 日期开头为新行
+      negate: true
+      match: after
+```
+
+**Filebeat 配置示例（JSON 格式，`json_format: true`）**
+
+```yaml
+filebeat.inputs:
+  - type: log
+    paths:
+      - /path/to/aihr/logs/debug/*/*.log
+    json.keys_under_root: true         # 字段提升至根，无需正则解析
+    json.overwrite_keys: true
+```
+
+---
+
+**Kubernetes 部署 — stdout 采集**
+
+当前 CI/CD 的 K8s Deployment（`.gitlab-ci.yml`）未挂载 PVC，`/app/logs` 写入容器临时存储，Pod 重启后丢失。K8s 自动采集 stdout，是 K8s 环境的**主要采集通道**：
+
+```
+容器 stdout（uvicorn + app logger）
+   ↓
+K8s Node 上的容器运行时（containerd / Docker）
+   ↓ /var/log/containers/*.log
+DaemonSet（Fluent Bit / Filebeat） → Elasticsearch / Loki / Splunk
+```
+
+**开启 JSON 格式**后，Loki / ES 无需 Grok 正则，直接按字段过滤：
+
+```
+{app="aihr-ocr"} | json | business_type="简历解析" | level="ERROR"
+```
+
+**生产 K8s 推荐补充配置**
+
+```yaml
+# Deployment 补充：挂载 PVC 持久化日志文件（人工追溯 / 审计）
+volumes:
+  - name: logs
+    persistentVolumeClaim:
+      claimName: aihr-logs-pvc
+containers:
+  - name: aihr-ocr
+    volumeMounts:
+      - name: logs
+        mountPath: /app/logs
+    env:
+      - name: json_format          # 让 stdout 输出结构化 JSON
+        value: "true"
+      - name: LOG_LEVEL            # K8s ConfigMap 动态调整级别，无需重启
+        value: "INFO"
+```
+
+> PVC 容量建议：按 `50MB × 天数 × 副本数` 预估；`error/` 目录体积远小于 `debug/`。
+
+---
+
+**本地调试快速命令**
+
+```bash
+# 实时跟踪当天最新 debug 日志
+tail -f logs/debug/$(date +%Y-%m)/debug_$(date +%Y-%m-%d)_*.log
+
+# 按 taskId 过滤（文件中唯一标识）
+grep "e39d009b" logs/debug/2026-06/debug_2026-06-02_*.log
+
+# K8s Pod 实时日志（最近 200 行）
+kubectl logs -n demo -l app=aihr-ocr --tail=200 -f
+
+# K8s JSON 格式日志 jq 过滤（仅 ERROR）
+kubectl logs -n demo -l app=aihr-ocr | jq 'select(.level=="ERROR")'
+```
 
 ---
 
@@ -1293,11 +1677,68 @@ GET /api/tasks?status=3  ← 只返回"已完成"任务
 
 ---
 
-### 6.8 遗留批量接口（向后兼容）
+### 6.8 同步批量接口
 
-#### `POST /v1/batch/resumes`
+#### `POST /api/resume/sync/batch`
 
-同步批量解析（最多 50 份），不含打标，适用于批量 OCR 场景。响应包含每份简历的解析结果和耗时。
+同步批量**解析 + 打标**，上限 50 份，阻塞等待全部完成后一次性返回完整结果。
+适合离线批处理、脚本批量导入等场景；在线高并发场景推荐使用 `/api/resume/async/batch`。
+
+**请求体（Content-Type: application/json）**
+
+```json
+{
+  "resumes": [
+    {"type": "url",    "file": {"name": "a.pdf", "path": "http://minio/resumes/a.pdf", "extra": "userId_001"}},
+    {"type": "file",   "file": {"name": "b.pdf", "path": "/app/uploads/b.pdf"}},
+    {"type": "base64", "file": {"name": "c.pdf", "content": "<base64_string>"}}
+  ],
+  "jobTitle": "算法工程师",
+  "requiredSkills": "Python,机器学习",
+  "jobDescription": "...",
+  "jobSensitiveWords": "竞业,保密协议",
+  "max_concurrency": 4
+}
+```
+
+与异步 batch 接口的主要差异：
+
+| 项目 | `/api/resume/async/batch` | `/api/resume/sync/batch` |
+|------|--------------------------|--------------------------|
+| 文件来源 | 仅 `type=url` | `url` / `file` / `base64` 均支持 |
+| 上限 | 20 份 | 50 份 |
+| 返回时机 | 立即返回 taskId | 阻塞直至全部完成 |
+| 结果获取 | 需轮询 `/api/resume/async/result` | 响应体直接包含完整结果 |
+
+**响应格式**
+
+外层统计字段 + `results` 数组，每条 `results[i]` 与 `GET /api/resume/async/result`（status=3）的完整响应**格式完全一致**：
+
+```json
+{
+  "total": 2,
+  "success": 2,
+  "failed": 0,
+  "elapsed_s": 42.5,
+  "results": [
+    {
+      "code": 0,
+      "msg": "success",
+      "data": {
+        "taskId": "uuid-a",
+        "status": 3,
+        "statusDesc": "任务完成",
+        "elapsedSeconds": 41.2,
+        "estimatedSeconds": 90,
+        "extra": "userId_001",
+        "result": { "...": "完整 v3.1 JSON，见第7节" }
+      }
+    }
+  ]
+}
+```
+
+**并发机制**：`asyncio.gather` 并发执行所有任务，batch 级 `Semaphore(max_concurrency)` 与全局 `_parse_semaphore(MAX_WORKERS)` 双层限流；任务记录写入 `_task_store`，可通过 `/api/resume/async/result?taskId=` 单独补查。
 
 ---
 
@@ -1894,7 +2335,7 @@ else:
 | GET | `/health` | 健康检查 | 已有 |
 | GET | `/v1/models` | OpenAI 兼容模型列表 | 已有 |
 | POST | `/v1/chat/completions` | OpenAI 兼容对接（DeepSeek-OCR / DeepSeek-OCR-JSON / AIHR-Resume） | 已有 |
-| POST | `/v1/batch/resumes` | 同步批量解析（≤50，仅 OCR，遗留接口） | 已有 |
+| POST | `/api/resume/sync/batch` | 同步批量解析+打标（≤50，url/file/base64，直接返回完整结果） | 新增 |
 | POST | `/api/resume/async/parse` | 单文件异步解析+打标 | 已有 |
 | GET | `/api/resume/async/result` | 轮询任务结果 | 已有 |
 | POST | `/api/resume/async/batch` | 批量异步（JSON，type=url，≤20） | 已有 |

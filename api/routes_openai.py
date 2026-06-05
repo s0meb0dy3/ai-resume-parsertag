@@ -19,8 +19,8 @@ from pydantic import BaseModel, Field
 
 from config import MAX_WORKERS, logger, set_log_context, wrap_for_executor
 from file_utils import get_pdf_source_from_content
-from parser import _batch_process, _parse_with_logging
-from tasks import TaskRecord, _run_parse_and_tag, _task_lock, _task_store, executor
+from parser import _parse_with_logging
+from tasks import TaskRecord, _STATUS_DESC, _run_parse_and_tag, _task_lock, _task_store, executor
 
 router = APIRouter()
 
@@ -259,22 +259,97 @@ async def create_chat_completion(request: ChatCompletionRequest):
     return JSONResponse(status_code=200, media_type="application/json; charset=utf-8", content=content_body)
 
 
-@router.post("/v1/batch/resumes")
+@router.post("/api/resume/sync/batch")
 async def batch_parse_resumes(request: dict):
     """
-    同步批量解析（纯解析，无打标），调用方同步等待全部完成后返回。
-    适合离线批处理场景；在线场景建议改用 /api/resume/async/batch 异步接口。
-    单次上限 50 份；超时受 API_TIMEOUT 控制。
+    同步批量解析+打标，阻塞等待全部完成后返回。
+    每条 result 格式与 GET /api/resume/async/result (status=3) 的 data 字段完全一致。
+    单次上限 50 份；max_concurrency 控制并发上限（1~30，默认同 MAX_WORKERS）。
+    支持与 /api/resume/async/batch 相同的请求体字段（jobTitle / requiredSkills / jobDescription / jobSensitiveWords）。
     """
     t0           = time.time()
     resume_items = request.get("resumes", [])
-    max_conc     = min(request.get("max_concurrency", MAX_WORKERS), 30)
+    max_conc     = min(int(request.get("max_concurrency", MAX_WORKERS)), 30)
+    job_info     = {k: request.get(k, "") or ""
+                    for k in ("jobTitle", "requiredSkills", "jobDescription", "jobSensitiveWords")}
+
     if not resume_items:
         return JSONResponse(status_code=400, content={"error": "resumes 数组不能为空"})
     if len(resume_items) > 50:
         return JSONResponse(status_code=400, content={"error": "单次最多处理 50 份简历"})
-    results = await asyncio.get_running_loop().run_in_executor(executor, _batch_process, resume_items, max_conc)
-    success = sum(1 for r in results if r and r["success"])
-    return JSONResponse(content={"total": len(results), "success": success,
-                                  "failed": len(results) - success,
-                                  "elapsed_s": round(time.time() - t0, 2), "results": results})
+
+    loop = asyncio.get_running_loop()
+
+    # 下载/读取每份简历文件（同步完成，失败直接标记 error）
+    prepared = []
+    for item in resume_items:
+        file_meta = item.get("file", {})
+        filename  = file_meta.get("name", "resume.pdf")
+        extra     = file_meta.get("extra") or item.get("extra") or None
+        try:
+            source, fn = await loop.run_in_executor(executor, get_pdf_source_from_content, [item])
+        except Exception as e:
+            prepared.append({"task_id": None, "filename": filename, "extra": extra, "error": str(e), "source": None})
+            continue
+        if source is None:
+            prepared.append({"task_id": None, "filename": filename, "extra": extra,
+                              "error": "无法获取 PDF，请检查 type/path/content 字段", "source": None})
+            continue
+        task_id = str(uuid.uuid4())
+        async with _task_lock:
+            _task_store[task_id] = TaskRecord(task_id=task_id, extra=extra)
+        prepared.append({"task_id": task_id, "filename": fn or filename,
+                         "extra": extra, "source": source, "error": None})
+
+    # 并发执行解析+打标（batch 级 semaphore 叠加在 _parse_semaphore 之上）
+    sem = asyncio.Semaphore(max_conc)
+
+    async def _run_one(p: dict):
+        if p["error"]:
+            return
+        async with sem:
+            await _run_parse_and_tag(p["task_id"], p["source"], p["filename"], job_info)
+
+    await asyncio.gather(*[_run_one(p) for p in prepared])
+
+    # 每条结果完整包装为与 GET /api/resume/async/result 相同的响应结构
+    results = []
+    for p in prepared:
+        if p["error"]:
+            data: dict = {
+                "taskId":           None,
+                "status":           4,
+                "statusDesc":       "任务失败",
+                "elapsedSeconds":   0,
+                "estimatedSeconds": 90,
+                "extra":            p["extra"],
+                "errorMsg":         p["error"],
+            }
+            results.append({"code": 1, "msg": p["error"], "data": data})
+            continue
+        async with _task_lock:
+            rec = _task_store.get(p["task_id"])
+        status  = rec.status if rec else 4
+        elapsed = round((rec.completed_at or time.time()) - rec.created_at, 1) if rec else 0
+        data = {
+            "taskId":           p["task_id"],
+            "status":           status,
+            "statusDesc":       _STATUS_DESC.get(status, "未知"),
+            "elapsedSeconds":   elapsed,
+            "estimatedSeconds": 90,
+            "extra":            p["extra"],
+        }
+        if rec and rec.status == 3:
+            data["result"] = rec.result
+        elif rec and rec.status == 4:
+            data["errorMsg"] = rec.error_msg
+        results.append({"code": 0, "msg": "success", "data": data})
+
+    success = sum(1 for r in results if r.get("code") == 0 and r.get("data", {}).get("status") == 3)
+    return JSONResponse(content={
+        "total":     len(results),
+        "success":   success,
+        "failed":    len(results) - success,
+        "elapsed_s": round(time.time() - t0, 2),
+        "results":   results,
+    })

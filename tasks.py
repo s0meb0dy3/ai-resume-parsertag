@@ -20,6 +20,7 @@ from config import MAX_WORKERS, TASK_TTL_MINUTES, logger, wrap_for_executor, set
 from parser import _llm_call, _parse_with_logging, _save_result
 from postprocess import _conform_to_template
 from tag.tagger import run_tagging
+from langfuse_client import observe, propagate_attributes, update_current_observation, LANGFUSE_TAGS
 
 # ── 全局线程池 ────────────────────────────────────────────────────
 # thread_name_prefix 让线程名出现在日志/traceback，便于定位阻塞问题
@@ -112,6 +113,7 @@ def _log_tag_info(task_id: str, filename: str, tag_info: dict,
 
 # ── 解析+打标流水线 ───────────────────────────────────────────────
 
+@observe()
 async def _run_parse_and_tag(task_id: str, source, filename: str, job_info: dict):
     """
     两阶段流水线：① PDF → 简历 JSON（受 _parse_semaphore 限流）② 简历 JSON → 打标结果。
@@ -120,60 +122,70 @@ async def _run_parse_and_tag(task_id: str, source, filename: str, job_info: dict
     """
     loop           = asyncio.get_running_loop()
     pipeline_start = time.time()
-    try:
-        # 阶段一：PDF 渲染 + LLM 解析（CPU/IO 密集，限流防止线程池积压）
-        # set_log_context 必须在 wrap_for_executor 之前调用，使 copy_context() 能捕获正确的 ContextVar 快照
-        set_log_context(request_id=task_id[:8], business_type="简历解析", filename=filename)
-        async with _parse_semaphore:
-            await _set_task_field(task_id, status=1)
-            resume_start = time.time()
-            resume       = await loop.run_in_executor(
-                executor, wrap_for_executor(_parse_with_logging), source, filename
+    with propagate_attributes(tags=LANGFUSE_TAGS, session_id=task_id, user_id=filename):
+        try:
+            # 阶段一：PDF 渲染 + LLM 解析（CPU/IO 密集，限流防止线程池积压）
+            # set_log_context 必须在 wrap_for_executor 之前调用，使 copy_context() 能捕获正确的 ContextVar 快照
+            set_log_context(request_id=task_id[:8], business_type="简历解析", filename=filename)
+            async with _parse_semaphore:
+                await _set_task_field(task_id, status=1)
+                resume_start = time.time()
+                resume       = await loop.run_in_executor(
+                    executor, wrap_for_executor(_parse_with_logging), source, filename
+                )
+            resume_parse_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            logger.info(f"[{task_id}] 阶段一完成，耗时 {time.time() - resume_start:.1f}s")
+
+            # 阶段二：正向标签 + 风险标签打标（不占 semaphore）
+            set_log_context(request_id=task_id[:8], business_type="标签打标", filename=filename)
+            await _set_task_field(task_id, status=2)
+            tag_start = time.time()
+            tag_info  = await loop.run_in_executor(
+                executor, wrap_for_executor(lambda: run_tagging(resume, job_info, llm_call_fn=_llm_call))
             )
-        resume_parse_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        logger.info(f"[{task_id}] 阶段一完成，耗时 {time.time() - resume_start:.1f}s")
+            tag_elapsed   = time.time() - tag_start
+            total_elapsed = time.time() - pipeline_start
 
-        # 阶段二：正向标签 + 风险标签打标（不占 semaphore）
-        set_log_context(request_id=task_id[:8], business_type="标签打标", filename=filename)
-        await _set_task_field(task_id, status=2)
-        tag_start = time.time()
-        tag_info  = await loop.run_in_executor(
-            executor, wrap_for_executor(lambda: run_tagging(resume, job_info, llm_call_fn=_llm_call))
-        )
-        tag_elapsed   = time.time() - tag_start
-        total_elapsed = time.time() - pipeline_start
+            _log_tag_info(task_id, filename, tag_info, resume_parse_time, tag_elapsed, total_elapsed)
 
-        _log_tag_info(task_id, filename, tag_info, resume_parse_time, tag_elapsed, total_elapsed)
+            result = _conform_to_template(task_id, resume, tag_info, resume_parse_time)
 
-        result = _conform_to_template(task_id, resume, tag_info, resume_parse_time)
+            async with _task_lock:
+                _rec = _task_store.get(task_id)
+            _extra = _rec.extra if _rec else None
 
-        async with _task_lock:
-            _rec = _task_store.get(task_id)
-        _extra = _rec.extra if _rec else None
+            completed_at      = time.time()
+            full_api_response = {
+                "code": 0, "msg": "success",
+                "data": {
+                    "taskId":           task_id,
+                    "status":           3,
+                    "statusDesc":       "任务完成",
+                    "elapsedSeconds":   round(completed_at - pipeline_start, 1),
+                    "estimatedSeconds": 90,
+                    "extra":            _extra,
+                    "result":           result,
+                },
+            }
+            SEP = "─" * 60
+            logger.debug(f"┌{SEP}")
+            logger.debug(f"│ 完整响应  文件: {filename}  taskId: {task_id}")
+            for line in json.dumps(full_api_response, ensure_ascii=False, indent=2).splitlines():
+                logger.debug(f"│  {line}")
+            logger.debug(f"└{SEP}")
 
-        completed_at      = time.time()
-        full_api_response = {
-            "code": 0, "msg": "success",
-            "data": {
-                "taskId":           task_id,
-                "status":           3,
-                "statusDesc":       "任务完成",
-                "elapsedSeconds":   round(completed_at - pipeline_start, 1),
-                "estimatedSeconds": 90,
-                "extra":            _extra,
-                "result":           result,
-            },
-        }
-        SEP = "─" * 60
-        logger.debug(f"┌{SEP}")
-        logger.debug(f"│ 完整响应  文件: {filename}  taskId: {task_id}")
-        for line in json.dumps(full_api_response, ensure_ascii=False, indent=2).splitlines():
-            logger.debug(f"│  {line}")
-        logger.debug(f"└{SEP}")
+            _save_result(task_id, filename, result)
+            update_current_observation(output={
+                "taskId":   task_id,
+                "filename": filename,
+                "status":   "completed",
+                "elapsed":  round(completed_at - pipeline_start, 1),
+                "candidate": result.get("candidate", {}).get("name", ""),
+                "confidence": result.get("tagInfo", {}).get("confidence"),
+            })
+            await _set_task_field(task_id, status=3, result=result, completed_at=completed_at)
 
-        _save_result(task_id, filename, result)
-        await _set_task_field(task_id, status=3, result=result, completed_at=completed_at)
-
-    except Exception as e:
-        logger.error(f"[{task_id}] 任务失败: {e}")
-        await _set_task_field(task_id, status=4, error_msg=str(e), completed_at=time.time())
+        except Exception as e:
+            logger.error(f"[{task_id}] 任务失败: {e}")
+            update_current_observation(output={"taskId": task_id, "status": "failed", "error": str(e)})
+            await _set_task_field(task_id, status=4, error_msg=str(e), completed_at=time.time())

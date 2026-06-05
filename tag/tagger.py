@@ -16,6 +16,7 @@ from .tag_data import (
 from .tag_config import POSITIVE_DIMENSIONS, NEGATIVE_DIMENSIONS, SEVERITY_DEDUCTION
 from prompts import POSITIVE_TAG_PROMPT_TPL, POSITIVE_TAG_SCHEMA, TAGGER_SYSTEM
 from config import logger  # 统一使用带 ContextVar 上下文的 logger
+from langfuse_client import observe
 
 _RUNTIME_CFG_FILE = pathlib.Path(__file__).parent.parent / "schemas" / "tag_config_runtime.json"
 
@@ -326,6 +327,7 @@ def _normalize_positive_tags(tags: list, resume: dict, pos_dims=None) -> list:
     return normalized
 
 
+@observe()
 def extract_positive_tags_llm(resume: dict, job_info: dict, llm_call_fn) -> dict:
     """
     LLM 层正向标签提取，失败时降级到规则层。
@@ -583,6 +585,7 @@ def _detect_education_risk(educations: list, hit_tags: list, rules: dict):
 
 # ── 统一打标入口 ──────────────────────────────────────────────────
 
+@observe()
 def run_tagging(resume: dict, job_info: dict, llm_call_fn=None) -> dict:
     """
     两阶段打标：

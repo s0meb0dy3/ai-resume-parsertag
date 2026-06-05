@@ -79,3 +79,11 @@ MAX_FILE_SIZE_MB   = int(os.getenv("MAX_FILE_SIZE_MB", "20"))
 # 设置后，/api/tags/config 的写接口（POST/PUT/DELETE）要求 Authorization: Bearer <token>
 # 未设置时跳过鉴权（适合内网隔离部署），生产环境建议配置
 TAGS_ADMIN_TOKEN = os.getenv("TAGS_ADMIN_TOKEN", "")
+
+# ── Langfuse 可观测性（可选）──────────────────────────────────────
+# 未配置 LANGFUSE_SECRET_KEY / LANGFUSE_PUBLIC_KEY 时，@observe() 降级为空操作
+# 配置项集中在 langfuse_client.py 读取，此处仅声明供文档查阅
+# LANGFUSE_SECRET_KEY  = sk-lf-...
+# LANGFUSE_PUBLIC_KEY  = pk-lf-...
+# LANGFUSE_HOST        = http://localhost:3100   （默认值）
+# LANGFUSE_TAGS        = dev_v2.3               （逗号分隔多个 tag）

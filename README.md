@@ -149,6 +149,151 @@ GET /health
 
 ---
 
+## 日志系统
+
+### 文件存储结构
+
+```
+logs/                                     ← LOG_DIR 环境变量控制（默认 ./logs）
+├── debug/
+│   └── YYYY-MM/
+│       └── debug_YYYY-MM-DD_<pid>.log   ← 全量日志（DEBUG 及以上），永久保留
+└── error/
+    └── YYYY-MM/
+        └── error_YYYY-MM-DD_<pid>.log   ← 仅 ERROR 级别，永久保留
+```
+
+每天零点自动滚动新文件；单文件超过 50MB 时提前轮转（时间 + 大小双重触发）。文件名中 `<pid>` 默认为进程 PID，生产环境可通过 `log_pid: aihr` 改为固定标识。
+
+### 日志格式
+
+**文本格式（默认）**
+
+```
+2026-06-02 10:30:45 | INFO  | [a1b2c3d4] [简历解析] [张三.pdf] [-] | [parser.py:128 _log_result] | 解析结果 文件: 张三.pdf 耗时: 32s
+```
+
+字段依次为：`时间 | 级别 | [request_id] [业务类型] [文件名] [扩展字段] | [文件:行号 函数] | 消息`。时间强制使用北京时间（CST=UTC+8），不依赖容器 TZ 环境变量。控制台附带 ANSI 颜色，文件为纯文本。
+
+**JSON 格式**（`json_format: true`，适配 K8s/ELK/Loki/Fluentd）：每行一条单行 JSON，`set_extra_context()` 注入的字段作为顶层 key 输出。
+
+### 每次任务的三段日志块
+
+每个异步任务完成后，`debug/` 日志中连续输出三段结构化内容：
+
+| 序号 | 日志标题 | 内容 |
+|------|---------|------|
+| ① | `解析结果 文件: xxx 耗时: Ns` | 候选人基础信息 / 教育 / 工作 / 项目摘要 + 完整解析 JSON |
+| ② | `打标结果 文件: xxx taskId: xxx` | 5 维正向标签（含置信度）/ 风险标签 / 整体置信度 / 扣分合计 |
+| ③ | `完整输出 JSON 文件: xxx taskId: xxx` | v3.1 格式完整 JSON（与接口返回完全一致） |
+
+同步落盘到 `results/<日期>_<时间>_<姓名>_<taskId前8位>.json`，服务重启后可人工追溯。
+
+### 配置文件（log_config.yml）
+
+```yaml
+log_config:
+  name: aihr
+  log_level_console: INFO      # 控制台级别；INFO 过滤 DEBUG 噪音
+  log_level_file: DEBUG        # 文件级别；通常保持 DEBUG
+  log_folder: logs
+  log_pid: ""                  # 文件名标识；空 = 进程 PID；生产建议填 aihr
+  max_bytes: 52428800          # 单文件上限（50MB）；0 = 不限
+  use_queue: false             # Gunicorn 多 worker 时改为 true
+  json_format: false           # true = 单行 JSON（ELK/Loki 场景）
+```
+
+支持热更新（watchdog 监听文件变化，200ms 防抖后自动生效，无需重启）。
+
+环境变量 `LOG_LEVEL` 可在运行时临时覆盖日志级别（优先级高于配置文件，K8s ConfigMap 场景常用）；`LOG_CONFIG_PATH` 可指定配置文件路径。
+
+### 噪音过滤
+
+`GET /health`、`HEAD /health`、`GET /favicon.ico` 的 uvicorn.access 日志自动过滤，不写入业务日志。
+
+### 业务集成方式
+
+`logger_manager.py` 通过 `config.py` 统一转发给业务模块，业务层不直接依赖 `logger_manager`：
+
+```
+logger_manager.py
+   └── config.py（re-export）
+         ├── logger / set_log_context / wrap_for_executor
+         └── get_logger_manager（lifespan 管理）
+```
+
+**生命周期**：`app.py` lifespan 启动时调用 `lm.start_config_watcher()` 开启 `log_config.yml` 热更新监听；关闭时依次调用 `stop_config_watcher()` 和 `stop_queue_listener()` 确保缓冲日志落盘。
+
+**请求上下文**：每个请求入口，`tasks._run_parse_and_tag` 调用 `set_log_context(request_id=task_id[:8], business_type="简历解析/标签打标", filename=filename)`，再用 `wrap_for_executor(fn)` 将 ContextVar 快照传入线程池线程，确保 `parser` / `tagger` 中的所有日志均携带正确的请求上下文。
+
+**三段日志的写入者**：
+
+| 段 | 写入函数 | 所在文件 | 级别 |
+|----|---------|---------|------|
+| ① 解析结果（摘要） | `_log_result()` | `parser.py` | INFO |
+| ① 完整简历 JSON | `_log_result()` | `parser.py` | DEBUG |
+| ② 打标结果 | `_log_tag_info()` | `tasks.py` | INFO |
+| ③ 完整响应 JSON | 内联 `logger.debug` | `tasks.py` | DEBUG |
+
+`DEBUG` 级别内容（完整 JSON）仅写文件，控制台默认 `INFO` 不展示。
+
+### 日志采集
+
+服务存在两条输出路径，部署模式不同，采集方式也不同：
+
+**路径一：文件（Docker Compose）**
+
+`docker-compose.yml` 将 `./logs:/app/logs` 挂载到宿主机，日志文件可直接在宿主机读取：
+
+```
+宿主机 ./logs/debug/YYYY-MM/debug_<date>_<pid>.log
+              └── Filebeat / Fluentd 采集 → Elasticsearch / Loki
+```
+
+切换 JSON 格式后，Filebeat 无需正则解析，直接 `json.keys_under_root: true` 即可按字段索引。
+
+**路径二：stdout（Kubernetes）**
+
+当前 CI/CD 的 K8s Deployment 未挂载 PVC，`/app/logs` 写入容器临时存储（Pod 重启后丢失）。K8s 自动采集 stdout，是 K8s 环境的主要日志通道：
+
+```
+uvicorn stdout（含 app logger + uvicorn.access）
+   └── kubectl logs / DaemonSet（Filebeat / Fluent Bit）→ Elasticsearch / Loki
+```
+
+生产 K8s 建议同时启用两项：
+
+1. `json_format: true`（或 `LOG_LEVEL` 环境变量）—— 让 stdout 输出结构化 JSON，方便 Loki/ES 按字段过滤
+2. 挂载 PVC 持久化 `/app/logs` —— 保留文件副本供人工追溯
+
+```yaml
+# K8s Deployment 补充配置示例
+volumes:
+  - name: logs
+    persistentVolumeClaim:
+      claimName: aihr-logs-pvc
+containers:
+  - name: aihr-ocr
+    volumeMounts:
+      - name: logs
+        mountPath: /app/logs
+    env:
+      - name: LOG_LEVEL
+        value: "INFO"          # ConfigMap 临时调整级别，无需重启
+```
+
+**本地调试**
+
+```bash
+# 实时跟踪最新 debug 日志
+tail -f logs/debug/$(date +%Y-%m)/debug_$(date +%Y-%m-%d)_*.log
+
+# K8s Pod 日志（最近 100 行）
+kubectl logs -n demo -l app=aihr-ocr --tail=100 -f
+```
+
+---
+
 ## 本地启动
 
 ```bash

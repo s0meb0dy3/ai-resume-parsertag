@@ -25,6 +25,7 @@ from pathlib import Path
 import json_repair
 from openai import OpenAI
 
+from langfuse_client import observe
 from config import (
     MODEL_SERVICE_URL, API_KEY, MODEL_NAME, TEMPERATURE, MAX_TOKENS,
     API_TIMEOUT, MAX_RETRIES, MAX_WORKERS, PDF_MAX_PAGES_ONCE, BATCH_SIZE,
@@ -49,6 +50,7 @@ client = OpenAI(
 _DISABLE_THINKING = _THINKING_DISABLE_PARAMS
 
 
+@observe()
 def _llm_call(messages: list) -> str:
     """
     统一 LLM 调用入口。
@@ -78,6 +80,7 @@ def _llm_call(messages: list) -> str:
 
 # ── 解析核心 ──────────────────────────────────────────────────────
 
+@observe()
 def run(source, verbose: bool = False) -> dict:
     """
     PDF → 结构化 JSON 主流程。

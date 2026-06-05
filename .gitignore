@@ -10,7 +10,6 @@ build/
 # 环境
 .env
 .env.*
-!.env.example
 venv/
 .venv/
 

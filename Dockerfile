@@ -10,6 +10,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py .
 COPY config.py .
+COPY langfuse_client.py .
 COPY logger_manager.py .
 COPY log_config.yml .
 COPY parser.py .
