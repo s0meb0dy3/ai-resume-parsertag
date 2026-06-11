@@ -5,13 +5,16 @@ WORKDIR /app
 ENV TZ=Asia/Shanghai
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir \
-    -i https://mirrors.aliyun.com/pypi/simple/ \
-    --trusted-host mirrors.aliyun.com \
-    --timeout 300 \
-    -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY app.py .
+COPY config.py .
+COPY api/ ./api/
+COPY core/ ./core/
+COPY logger/ ./logger/
+COPY utils/ ./utils/
+COPY tag/ ./tag/
+COPY schemas/ ./schemas/
 
 RUN mkdir -p uploads logs results
 
@@ -23,6 +26,6 @@ ENV UPLOAD_DIR=/app/uploads \
     SERVICE_PORT=21804
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD sh -c "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:${SERVICE_PORT}/health')\"" || exit 1
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:21804/health')" || exit 1
 
 CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port ${SERVICE_PORT:-21804}"]
