@@ -25,17 +25,17 @@ from pathlib import Path
 import json_repair
 from openai import OpenAI
 
-from langfuse_client import observe
+from logger.langfuse_client import observe
 from config import (
     MODEL_SERVICE_URL, API_KEY, MODEL_NAME, TEMPERATURE, MAX_TOKENS,
     API_TIMEOUT, MAX_RETRIES, MAX_WORKERS, PDF_MAX_PAGES_ONCE, BATCH_SIZE,
     UPLOAD_DIR, RESULT_DIR, _THINKING_DISABLE_PARAMS,
 )
-from logger_manager import logger
-from prompts import PROMPT_HR, BATCH_SYSTEM
-from pdf_utils import pdf_to_images, pdf_to_batches, get_page_count, smart_batch_size, pil_to_base64
-from postprocess import _post_process, _validate_schema, _merge_results
-from file_utils import get_pdf_source_from_content
+from logger.logger_manager import logger
+from core.prompts import PROMPT_HR, BATCH_SYSTEM
+from utils.pdf_utils import pdf_to_images, pdf_to_batches, get_page_count, smart_batch_size, pil_to_base64
+from core.postprocess import _post_process, _validate_schema, _merge_results
+from utils.file_utils import get_pdf_source_from_content
 
 # ── LLM 客户端 ────────────────────────────────────────────────────
 

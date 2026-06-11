@@ -8,7 +8,7 @@ LANGFUSE_SECRET_KEY / LANGFUSE_PUBLIC_KEY 未配置时自动降级为空操作�
 不影响主流程，服务可在无 Langfuse 的环境中正常启动。
 
 使用方式（其他模块）：
-    from langfuse_client import observe, propagate_attributes, LANGFUSE_TAGS
+    from logger.langfuse_client import observe, propagate_attributes, LANGFUSE_TAGS
 """
 import os
 

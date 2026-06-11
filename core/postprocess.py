@@ -11,7 +11,7 @@
   分批路径：_merge_results → _post_process → _validate_schema
   单批路径：_post_process → _validate_schema
 """
-from prompts import SCHEMA_KEYS, CANDIDATE_KEYS, EDU_KEYS, WORK_KEYS, PROJ_KEYS
+from core.prompts import SCHEMA_KEYS, CANDIDATE_KEYS, EDU_KEYS, WORK_KEYS, PROJ_KEYS
 from tag.tag_data import classify_education
 from tag import load_tag_cfg
 

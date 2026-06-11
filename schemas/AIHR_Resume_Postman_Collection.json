@@ -1,7 +1,7 @@
 {
   "info": {
-    "name": "AIHR 简历解析打标",
-    "_postman_id": "aihr-resume-parser-v5",
+    "name": "AI-Resume-ParserTag",
+    "_postman_id": "ai-resume-parsertag-v5",
     "description": "AIHR 简历解析 + 智能打标服务\n服务地址: http://192.168.12.185:21801\n\n接口列表:\n01  GET  /health                       健康检查\n02  POST /api/resume/async/batch       批量提交（MinIO URL，JSON body）\n03  GET  /api/resume/async/result      轮询单个任务结果\n04  GET  /api/tasks                    任务总览\n05  GET  /api/tags/config              标签配置（热更新）",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
@@ -27,8 +27,12 @@
         "header": [],
         "url": {
           "raw": "{{base_url}}/health",
-          "host": ["{{base_url}}"],
-          "path": ["health"]
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "health"
+          ]
         },
         "description": "检查服务是否在线。"
       },
@@ -75,8 +79,15 @@
         },
         "url": {
           "raw": "{{base_url}}/api/resume/async/batch",
-          "host": ["{{base_url}}"],
-          "path": ["api", "resume", "async", "batch"]
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "resume",
+            "async",
+            "batch"
+          ]
         },
         "description": "批量异步提交简历，JSON body，仅支持 type=url（从 MinIO 下载）。\n\n请求体字段：\n  resumes        必填，URL列表\n  jobTitle       选填，目标岗位名称\n  requiredSkills 选填，必要技能（英文逗号分隔）\n\nMinIO 信息：\n  地址：http://192.168.12.185:9000\n  Bucket：resumes（公开只读，同网段均可访问）\n  Console：http://192.168.12.185:9001\n  中文文件名需 URL 编码（urllib.parse.quote）\n\n提交成功后首个 taskId 自动存入集合变量，可直接用「03 轮询结果」查询。"
       },
@@ -114,8 +125,15 @@
         "header": [],
         "url": {
           "raw": "{{base_url}}/api/resume/async/result?taskId={{task_id}}",
-          "host": ["{{base_url}}"],
-          "path": ["api", "resume", "async", "result"],
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "resume",
+            "async",
+            "result"
+          ],
           "query": [
             {
               "key": "taskId",
@@ -160,8 +178,13 @@
         "header": [],
         "url": {
           "raw": "{{base_url}}/api/tasks",
-          "host": ["{{base_url}}"],
-          "path": ["api", "tasks"],
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "tasks"
+          ],
           "query": [
             {
               "key": "status",
@@ -189,8 +212,14 @@
         "header": [],
         "url": {
           "raw": "{{base_url}}/api/tags/config",
-          "host": ["{{base_url}}"],
-          "path": ["api", "tags", "config"]
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "tags",
+            "config"
+          ]
         },
         "description": "动态获取标签系统全量配置，每次调用自动重新加载 tag_config.py。\n\n修改 tag_config.py 后无需重启服务，调用此接口立即生效。\n\n典型用途：\n  前端下拉框初始化、筛选条件枚举、标签展示名映射"
       },

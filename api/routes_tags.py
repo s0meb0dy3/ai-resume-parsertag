@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import JSONResponse
 
 from config import RUNTIME_CFG_FILE, TAGS_ADMIN_TOKEN
-from tasks import _cfg_lock
+from core.tasks import _cfg_lock
 
 router = APIRouter()
 

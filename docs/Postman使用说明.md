@@ -17,6 +17,8 @@
 | **04** | **GET** | `/api/resume/async/result?taskId=` | **轮询单个任务结果** |
 | **05** | **GET** | `/api/tasks` | **任务总览（全部任务状态）** |
 | **06** | **POST** | `/api/resume/sync/batch` | **同步批量解析+打标（直接返回完整结果）** |
+| **06B** | **POST** | `/api/resume/sync/parse` | **同步批量仅解析（返回结构化简历 JSON，不打标）** |
+| **06C** | **POST** | `/api/resume/sync/tag` | **同步批量仅打标（输入解析 JSON，返回完整结果）** |
 | 07 | GET | `/api/tags/config` | 查询标签配置 |
 | 08 | POST | `/api/tags/config/positive` | 新增正向维度 🔒 |
 | 09 | PUT | `/api/tags/config/positive/{dimension}` | 更新正向维度 🔒 |
@@ -754,6 +756,286 @@ Content-Type: application/json
 
 ---
 
+## 六C、接口 06B — 同步批量仅解析
+
+```
+POST /api/resume/sync/parse
+Content-Type: application/json
+```
+
+**区别于接口 06（sync/batch）**：只执行 PDF → 结构化 JSON 解析，**不调用打标**，耗时更短（20~40s/份）。适合"先解析入库、后按岗位打标"的分步流程。输出的 `results[].data` 可直接传入接口 06C（sync/tag）完成打标，字段结构完全匹配，无需转换。
+
+### Postman 操作
+
+1. Body → **raw** → 右侧下拉选 **JSON**
+2. 粘贴以下请求体
+
+### 请求体
+
+```json
+{
+  "resumes": [
+    {
+      "type": "url",
+      "file": {
+        "name": "31岁-5年经验-证券事务代表-猎聘简历.pdf",
+        "path": "http://host.docker.internal:9000/resumes/31%E5%B2%81-5%E5%B9%B4%E7%BB%8F%E9%AA%8C-%E8%AF%81%E5%88%B8%E4%BA%8B%E5%8A%A1%E4%BB%A3%E8%A1%A8-%E7%8C%8E%E8%81%98%E7%AE%80%E5%8E%86.pdf",
+        "extra": "userId_001"
+      }
+    },
+    {
+      "type": "file",
+      "file": {
+        "name": "PKU刘旗简历.pdf",
+        "path": "/app/uploads/PKU刘旗简历.pdf"
+      }
+    }
+  ],
+  "max_concurrency": 4
+}
+```
+
+### 请求字段说明
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|:----:|------|
+| `resumes` | Array | ✅ | 简历列表，每项含 `type` + `file`，单次上限 50 份 |
+| `resumes[].type` | string | ✅ | `url` / `file` / `base64` 三选一 |
+| `resumes[].file.name` | string | ✅ | 文件名（含扩展名） |
+| `resumes[].file.path` | string | `url`/`file` 时必填 | MinIO URL 或容器内绝对路径 |
+| `resumes[].file.content` | string | `base64` 时必填 | PDF Base64 编码字符串 |
+| `resumes[].file.extra` | string | ✗ | 透传字段，原样返回 |
+| `max_concurrency` | int | ✗ | 并发数上限 1~30，默认 MAX_WORKERS |
+
+> 无需传 `jobTitle` / `requiredSkills` 等打标字段，本接口不执行打标
+
+### 响应格式
+
+```json
+{
+  "total": 2,
+  "success": 2,
+  "failed": 0,
+  "elapsed_s": 34.2,
+  "results": [
+    {
+      "code": 0,
+      "msg": "success",
+      "data": {
+        "filename": "31岁-5年经验-证券事务代表-猎聘简历.pdf",
+        "extra": "userId_001",
+        "resumeParseFinishTime": "2026-06-10 10:00:05",
+        "resume": {
+          "candidate": {
+            "name": "姚先生", "phone": "13800138000", "email": "",
+            "gender": 1, "age": 31, "address": "深圳",
+            "nativePlace": "", "selfEvaluation": "",
+            "expectedSalary": "20-30K", "expectedPosition": "证券事务代表"
+          },
+          "educations": [
+            {"school": "武汉大学", "major": "金融学", "degree": "硕士",
+             "education": "硕士研究生", "startDate": "2015-09", "endDate": "2018-07"}
+          ],
+          "works": [
+            {"company": "广州广钢气体能源股份有限公司", "position": "证券事务代表",
+             "description": "负责上市公司信息披露、三会运作及投资者关系管理",
+             "startDate": "2020-07", "endDate": "至今"}
+          ],
+          "projects": []
+        }
+      }
+    },
+    {
+      "code": 0,
+      "msg": "success",
+      "data": {
+        "filename": "PKU刘旗简历.pdf",
+        "extra": null,
+        "resumeParseFinishTime": "2026-06-10 10:00:08",
+        "resume": {"candidate": {"name": "刘旗", "...": "..."}, "...": "..."}
+      }
+    }
+  ]
+}
+```
+
+**失败时单条结果：**
+
+```json
+{
+  "code": 1,
+  "msg": "无法获取 PDF，请检查 type/path/content 字段",
+  "data": {
+    "filename": "b.pdf",
+    "extra": null,
+    "errorMsg": "无法获取 PDF，请检查 type/path/content 字段"
+  }
+}
+```
+
+---
+
+## 六D、接口 06C — 同步批量仅打标
+
+```
+POST /api/resume/sync/tag
+Content-Type: application/json
+```
+
+**区别于接口 06（sync/batch）**：只执行打标（LLM 正向标签 + 规则负面检测），**跳过 PDF 解析**，耗时约 5~20s/份。
+
+`resumes` 数组每项结构与接口 06B（sync/parse）响应的 `results[].data` 字段**完全一致**，可直接将解析接口的 `results` 数组透传，无需任何转换。输出格式与接口 06（sync/batch）完全相同。
+
+### Postman 操作
+
+1. 先调用接口 06B，获取解析结果
+2. 将解析结果的 `results` 数组中各项 `data` 字段组成新数组，作为本接口的 `resumes` 传入
+3. Body → **raw** → 右侧下拉选 **JSON**，粘贴以下请求体
+
+### 请求体
+
+```json
+{
+  "resumes": [
+    {
+      "filename": "31岁-5年经验-证券事务代表-猎聘简历.pdf",
+      "extra": "userId_001",
+      "resumeParseFinishTime": "2026-06-10 10:00:05",
+      "resume": {
+        "candidate": {
+          "name": "姚先生", "phone": "13800138000", "email": "",
+          "gender": 1, "age": 31, "address": "深圳",
+          "nativePlace": "", "selfEvaluation": "",
+          "expectedSalary": "20-30K", "expectedPosition": "证券事务代表"
+        },
+        "educations": [
+          {"school": "武汉大学", "major": "金融学", "degree": "硕士",
+           "education": "硕士研究生", "startDate": "2015-09", "endDate": "2018-07"}
+        ],
+        "works": [
+          {"company": "广州广钢气体能源股份有限公司", "position": "证券事务代表",
+           "description": "负责上市公司信息披露、三会运作及投资者关系管理",
+           "startDate": "2020-07", "endDate": "至今"}
+        ],
+        "projects": []
+      }
+    }
+  ],
+  "jobTitle": "证券事务代表",
+  "requiredSkills": "信息披露,三会运作,投资者关系",
+  "jobDescription": "负责上市公司证券事务管理",
+  "jobSensitiveWords": "",
+  "max_concurrency": 4
+}
+```
+
+### 请求字段说明
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|:----:|------|
+| `resumes` | Array | ✅ | 简历列表，每项为接口 06B 的 `results[].data`，单次上限 50 份 |
+| `resumes[].resume` | object | ✅ | 结构化简历 JSON（接口 06B 的 `data.resume` 字段） |
+| `resumes[].filename` | string | ✗ | 文件名，用于日志标识 |
+| `resumes[].extra` | string | ✗ | 透传字段，原样返回 |
+| `resumes[].resumeParseFinishTime` | string | ✗ | 解析完成时间，原样写入输出 `result.resumeParseFinishTime` |
+| `jobTitle` | string | ✗ | 目标岗位名称 |
+| `requiredSkills` | string | ✗ | 必要技能，逗号分隔 |
+| `jobDescription` | string | ✗ | JD 全文 |
+| `jobSensitiveWords` | string | ✗ | 自定义敏感词，逗号/分号分隔 |
+| `max_concurrency` | int | ✗ | 并发数上限 1~30，默认 MAX_WORKERS |
+
+### 响应格式
+
+与接口 06（sync/batch）**完全一致**，`data.result` 包含解析字段 + 正负向标签完整 v3.1 JSON：
+
+```json
+{
+  "total": 1,
+  "success": 1,
+  "failed": 0,
+  "elapsed_s": 8.7,
+  "results": [
+    {
+      "code": 0,
+      "msg": "success",
+      "data": {
+        "taskId": "aaa-111",
+        "status": 3,
+        "statusDesc": "任务完成",
+        "elapsedSeconds": 8.5,
+        "estimatedSeconds": 90,
+        "extra": "userId_001",
+        "result": {
+          "taskId": "aaa-111",
+          "resumeParseFinishTime": "2026-06-10 10:00:05",
+          "tagParseFinishTime":    "2026-06-10 10:00:13",
+          "candidate": {"name": "姚先生", "age": 31, "...": "..."},
+          "educations": [{"school": "武汉大学", "...": "..."}],
+          "works": [{"company": "广州广钢气体能源股份有限公司", "...": "..."}],
+          "projects": [],
+          "positiveTags": {
+            "tagsArray": [
+              {"dimension": "education",  "displayName": "学历背景",
+               "value": [{"tag": "985", "source": "ai"}, {"tag": "211", "source": "ai"}, {"tag": "硕士", "source": "ai"}]},
+              {"dimension": "companyBg",  "displayName": "公司背景",  "confidence": 0.82,
+               "value": [{"tag": "国企/央企", "source": "ai"}]},
+              {"dimension": "workYears",  "displayName": "工作年限",
+               "value": [{"tag": "5-10年", "source": "ai"}]},
+              {"dimension": "skills",     "displayName": "技能标签",  "confidence": 0.90,
+               "value": [{"tag": "信息披露", "source": "ai"}, {"tag": "三会运作", "source": "ai"}]},
+              {"dimension": "industry",   "displayName": "行业背景",  "confidence": 0.87,
+               "value": [{"tag": "金融科技", "source": "ai"}]}
+            ]
+          },
+          "negativeTags": {"hitCount": 0, "deductionScore": 0, "tagsArray": []}
+        }
+      }
+    }
+  ]
+}
+```
+
+**`resume` 字段格式错误时单条结果：**
+
+```json
+{
+  "code": 1,
+  "msg": "resume 字段缺失或格式错误",
+  "data": {
+    "taskId": "xxx",
+    "status": 4,
+    "statusDesc": "任务失败",
+    "elapsedSeconds": 0,
+    "estimatedSeconds": 90,
+    "extra": null,
+    "errorMsg": "resume 字段缺失或格式错误"
+  }
+}
+```
+
+### 接口 06B → 06C 串联示意
+
+```
+POST /api/resume/sync/parse
+  └─ results[0].data = {
+       "filename": "a.pdf",
+       "extra": "userId_001",
+       "resumeParseFinishTime": "...",
+       "resume": {...}
+     }
+
+直接将 results[].data 数组作为 resumes 传入：
+
+POST /api/resume/sync/tag
+  Body: {
+    "resumes": [ <results[0].data>, <results[1].data>, ... ],
+    "jobTitle": "证券事务代表",
+    "requiredSkills": "信息披露,三会运作"
+  }
+```
+
+---
+
 ## 九、接口 17 — OpenAI 兼容层（OneAPI 转发）
 
 ```
@@ -900,6 +1182,12 @@ A: 通过接口 07~14 修改后立即生效，无需重启服务（写入 `schem
 
 **Q: `extra` 字段有什么用？**  
 A: 调用方在提交时传入自己的业务 ID（如 userId、resumeId 等），服务原样存储并在接口 03 / 接口 04 响应中透传返回，方便业务侧做数据关联。
+
+**Q: 接口 06B（sync/parse）和接口 06C（sync/tag）怎么串联使用？**  
+A: 先调用接口 06B 解析 PDF，拿到 `results` 数组后，将每项的 `data` 字段（含 `filename` / `extra` / `resumeParseFinishTime` / `resume`）组成新数组，作为接口 06C 的 `resumes` 字段传入即可。接口 06C 会直接在解析 JSON 上跑打标，不重复解析 PDF，耗时约 5~20s/份（仅打标阶段）。同一批解析结果可以用不同的 `jobTitle` / `requiredSkills` 多次传入接口 06C，按岗位分别打标。
+
+**Q: 什么时候用 06B+06C，什么时候直接用 06（sync/batch）？**  
+A: 需要"先解析入库、后按岗位打标"或者对同一批简历做多次不同岗位打标时用 06B+06C；只需要一次性解析+打标直接拿结果时用 06（sync/batch）更简单。
 
 **Q: Mac 本地测试和生产的区别？**
 

@@ -1,4 +1,4 @@
-# CLAUDE.md — AIHR Resume Parser
+# CLAUDE.md — AI-Resume-ParserTag
 
 项目指南：在此目录工作时请先阅读本文件。
 
@@ -8,48 +8,63 @@ Python FastAPI 服务，将 PDF 简历通过多模态 LLM 解析为结构化 JSO
 
 ## 模块结构
 
-| 文件 | 职责 |
-|------|------|
-| `app.py` | 入口：FastAPI 实例、CORS、lifespan、`/health` |
-| `config.py` | 所有环境变量读取；`MODEL_SERVICE_URL` 为必填项，未配置时启动报错 |
-| `parser.py` | PDF 解析核心：`run()`、`_llm_call()`、`_parse_with_logging()` |
-| `tasks.py` | 异步任务状态机（`TaskRecord`）、流水线编排（`_run_parse_and_tag`）、线程池 `executor` |
-| `postprocess.py` | `_post_process()`、`_validate_schema()`、`_merge_results()`、`_conform_to_template()` |
-| `pdf_utils.py` | `pdf_to_images()`、`pdf_to_batches()`、`smart_batch_size()`，DPI=144 |
-| `file_utils.py` | `get_pdf_source_from_content()`、`download_file()` |
-| `prompts.py` | 所有 LLM prompt 常量；`COMPANY_SCHEMA`、`PROMPT_HR`、`POSITIVE_TAG_PROMPT_TPL` |
-| `logger_manager.py` | 滚动日志 + `_ContextFilter`（请求上下文）+ `_NoiseFilter`（过滤 `/health` 日志） |
-| `api/routes_async.py` | 异步解析+打标接口（5个路由） |
-| `api/routes_openai.py` | OpenAI 兼容接口（`/v1/chat/completions`、`/v1/batch/resumes`） |
-| `api/routes_tags.py` | 打标配置 CRUD（写接口需 `TAGS_ADMIN_TOKEN` Bearer Token） |
-| `api/routes_algorithm.py` | 算法内部接口（仅打标，无解析） |
-| `tag/tagger.py` | `run_tagging()`、`extract_positive_tags_llm()`、`detect_sensitive_tags()` |
-| `tag/tag_config.py` | 打标维度默认配置（兜底值） |
-| `tag/tag_data.py` | 院校/大厂/行业静态数据（启动时加载，改后需重启） |
-| `schemas/tag_config_runtime.json` | 运行时配置（热更新目标，优先级高于 `tag_config.py`） |
+```
+app.py          # 入口：FastAPI 实例、CORS、lifespan、/health
+config.py       # 所有环境变量读取；MODEL_SERVICE_URL 为必填项，未配置时启动报错
+
+core/           # 核心业务逻辑
+  parser.py     # PDF 解析：run()、_llm_call()、_parse_with_logging()
+  postprocess.py# _post_process()、_validate_schema()、_merge_results()、_conform_to_template()
+  tasks.py      # 异步任务状态机（TaskRecord）、流水线（_run_parse_and_tag）、线程池 executor
+  prompts.py    # 所有 LLM prompt 常量；COMPANY_SCHEMA、PROMPT_HR、POSITIVE_TAG_PROMPT_TPL
+
+utils/          # 基础工具
+  pdf_utils.py  # pdf_to_images()、pdf_to_batches()、smart_batch_size()，DPI=144
+  file_utils.py # get_pdf_source_from_content()、download_file()
+
+logger/         # 日志与可观测性
+  logger_manager.py  # 滚动日志 + _ContextFilter（请求上下文）+ _NoiseFilter（/health 过滤）
+  langfuse_client.py # Langfuse v2 可观测性客户端（未配置时降级为空操作）
+  log_config.yml     # 日志配置（watchdog 热更新；log_folder: ../logs 指向项目根 logs/）
+
+api/            # HTTP 路由层
+  routes_async.py    # 异步解析+打标接口（5个路由）
+  routes_openai.py   # OpenAI 兼容接口（/v1/chat/completions、/api/resume/sync/*）
+  routes_tags.py     # 打标配置 CRUD（写接口需 TAGS_ADMIN_TOKEN Bearer Token）
+  routes_algorithm.py# 算法内部接口（仅打标，无解析）
+
+tag/            # 打标逻辑
+  tagger.py     # run_tagging()、extract_positive_tags_llm()、detect_sensitive_tags()
+  tag_config.py # 打标维度默认配置（兜底值）
+  tag_data.py   # 院校/大厂/行业静态数据（启动时加载，改后需重启）
+
+schemas/
+  tag_config_runtime.json  # 运行时打标配置（热更新目标，优先级高于 tag_config.py）
+```
 
 ## 关键约定
 
 ### LLM 调用
-- 所有 LLM 调用统一通过 `parser._llm_call()`，不要在其他模块直接调用 `client`
+- 所有 LLM 调用统一通过 `core.parser._llm_call()`，不要在其他模块直接调用 `client`
 - `extra_body=_THINKING_DISABLE_PARAMS` 用于关闭 thinking block；遇到签名错误时自动去掉重试
 
 ### 异步任务
 - 任务状态：`0` 待处理 → `1` 解析中 → `2` 打标中 → `3` 完成 / `4` 失败
-- 所有任务状态修改通过 `tasks._set_task_field()`，持有 `_task_lock`（asyncio.Lock）
+- 所有任务状态修改通过 `core.tasks._set_task_field()`，持有 `_task_lock`（asyncio.Lock）
 - 阻塞 IO（PDF 渲染、LLM 调用）均通过 `loop.run_in_executor(executor, ...)` 卸载到线程池
 
 ### 配置热更新
 - 写接口写入 `schemas/tag_config_runtime.json`（原子替换：先写 `.tmp` 再 `rename`）
 - `_tagger_load_cfg()` 用 mtime 缓存，文件未变则不重新读取
-- `_conform_to_template()` 每次调用时动态读取配置，`displayName` 映射立即生效
+- `core.postprocess._conform_to_template()` 每次调用时动态读取配置，`displayName` 映射立即生效
 
 ### 日志上下文
 - `_thread_local.request_id / business_type / filename` 在每个请求开始时由 `_reset_log_context` 中间件重置
 - 不要在模块级别缓存 `_thread_local` 值
+- 日志配置在 `logger/log_config.yml`，`logger/logger_manager.py` 通过 watchdog 热更新
 
 ### 输出序列化
-- 最终输出格式 v3.1，由 `postprocess._conform_to_template()` 统一组装
+- 最终输出格式 v3.1，由 `core.postprocess._conform_to_template()` 统一组装
 - `positiveTags.tagsArray[].confidence`：`education` 和 `workYears` 维度不输出此字段（见 `_NO_CONF_DIM`）
 
 ## 开发注意

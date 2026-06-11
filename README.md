@@ -1,6 +1,6 @@
-# AIHR 简历解析与打标服务
+# AI-Resume-ParserTag
 
-基于 Qwen3.5 多模态大模型的 PDF 简历解析服务，输出结构化 JSON 并自动完成正向/负向标签打标。
+基于 Qwen3.5 多模态大模型的 PDF 简历解析与智能打标服务，输出结构化 JSON 并自动完成正向/负向标签标注。
 
 ---
 
@@ -16,7 +16,7 @@ PyMuPDF 渲染为图像（144 DPI）
    └── >8 页 ──→ 分批（2页/批）+ ThreadPoolExecutor 并发 → 字段合并
    │
    ▼
-Qwen3.5-397B-A17B（内网 vLLM 服务）
+Qwen3.5-397B-A17B（内网 vLLM 服务，OpenAI 兼容接口）
    │
    ▼
 结构化 JSON（候选人基本信息、工作经历、教育背景等）
@@ -27,7 +27,7 @@ Qwen3.5-397B-A17B（内网 vLLM 服务）
    └── 负向标签：敏感词、风险项、扣分维度
 ```
 
-**模型服务**：通过 `MODEL_SERVICE_URL` 环境变量配置（OpenAI 兼容接口，必填）  
+**模型服务**：通过 `MODEL_SERVICE_URL` 环境变量配置（必填）  
 **服务端口**：`21804`（容器）/ `30804`（Kubernetes NodePort）
 
 ---
@@ -37,29 +37,32 @@ Qwen3.5-397B-A17B（内网 vLLM 服务）
 ```
 .
 ├── app.py                   # 入口：FastAPI 实例 + lifespan + /health
-├── config.py                # 环境变量与全局配置
-├── logger_manager.py        # 日志管理（滚动文件 + 请求上下文过滤）
-├── parser.py                # PDF 解析核心（LLM 调用 + 多批并发）
-├── tasks.py                 # 异步任务管理（状态机 + 流水线编排）
-├── postprocess.py           # 后处理、Schema 校验、批次合并、输出序列化
-├── pdf_utils.py             # PDF 渲染工具（fitz + PIL）
-├── file_utils.py            # 文件下载与 PDF 来源识别
-├── prompts.py               # LLM Prompt 常量集中管理
-├── api/                     # FastAPI 路由模块
-│   ├── __init__.py
-│   ├── routes_async.py      # 异步解析+打标接口
+├── config.py                # 环境变量读取与全局配置
+├── api/                     # FastAPI 路由层
+│   ├── routes_async.py      # 异步解析 + 打标接口
 │   ├── routes_openai.py     # OpenAI 兼容接口
 │   ├── routes_tags.py       # 打标配置 CRUD（Bearer Token 鉴权）
 │   └── routes_algorithm.py  # 算法内部接口（仅打标，无解析）
+├── core/                    # 业务核心
+│   ├── parser.py            # PDF 解析（LLM 调用 + 多批并发）
+│   ├── tasks.py             # 异步任务状态机与流水线编排
+│   ├── postprocess.py       # 后处理、Schema 校验、批次合并、序列化
+│   └── prompts.py           # LLM Prompt 常量集中管理
+├── logger/                  # 日志子系统
+│   ├── logger_manager.py    # 日志管理（滚动文件 + 请求上下文过滤）
+│   ├── langfuse_client.py   # Langfuse 可观测性客户端
+│   └── log_config.yml       # 日志配置（支持热更新）
+├── utils/                   # 工具函数
+│   ├── pdf_utils.py         # PDF 渲染工具（fitz + PIL）
+│   └── file_utils.py        # 文件下载与 PDF 来源识别
 ├── tag/                     # 打标模块
-│   ├── __init__.py
 │   ├── tagger.py            # 正向标签提取 + 敏感词检测
 │   ├── tag_config.py        # 打标维度默认配置
 │   └── tag_data.py          # 学历/公司/行业分类数据
 ├── schemas/                 # JSON Schema 与运行时配置
-│   ├── resume_result_template.json   # 输出字段模板
-│   ├── tag_config_runtime.json       # 运行时打标配置（可热更新）
-│   ├── tag_static_data.json          # 静态标签数据
+│   ├── resume_result_template.json        # 输出字段模板
+│   ├── tag_config_runtime.json            # 运行时打标配置（可热更新）
+│   ├── tag_static_data.json               # 静态标签数据
 │   └── AIHR_Resume_Postman_Collection.json  # Postman 测试集合
 ├── test/                    # 测试工具
 │   ├── test_tagging.py      # 打标功能测试
@@ -67,13 +70,16 @@ Qwen3.5-397B-A17B（内网 vLLM 服务）
 │   ├── test_minio_url.py    # MinIO URL 测试
 │   └── upload_resume.py     # CLI 上传工具
 ├── docs/                    # 文档
-│   ├── api.md               # 接口文档
+│   ├── AI智能打标技术方案.md
 │   ├── Postman使用说明.md
-│   └── AI智能打标技术方案.md
-├── uploads/                 # 上传文件暂存目录（运行时生成）
-├── results/                 # 解析结果缓存目录（运行时生成）
+│   └── 优化方向分析.md
+├── uploads/                 # 上传文件暂存（运行时生成）
+├── results/                 # 解析结果缓存（运行时生成）
 ├── logs/                    # 日志目录（运行时生成）
 ├── Dockerfile
+├── docker-compose.yml
+├── .env.example
+├── .dockerignore
 ├── .gitlab-ci.yml
 └── requirements.txt
 ```
@@ -104,15 +110,15 @@ Qwen3.5-397B-A17B（内网 vLLM 服务）
 | `PUT`    | `/api/tags/config/negative/{dimension}` | 更新负向维度 |
 | `PUT`    | `/api/tags/config/severity` | 更新扣分等级 |
 
-### OpenAI 兼容接口（供旧系统对接）
+### OpenAI 兼容接口
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | `GET`  | `/v1/models` | 返回可用模型列表 |
-| `POST` | `/v1/chat/completions` | 兼容 OpenAI 格式，`model=DeepSeek-OCR`（仅解析）或 `model=DeepSeek-OCR-JSON`（解析+打标） |
+| `POST` | `/v1/chat/completions` | `model=DeepSeek-OCR`（仅解析）或 `model=DeepSeek-OCR-JSON`（解析+打标） |
 | `POST` | `/v1/batch/resumes` | 批量解析，最多 50 份 |
 
-### 算法内部接口（供内部服务/调试使用）
+### 算法内部接口
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -129,174 +135,90 @@ GET /health
 
 ## 环境变量
 
+参考 `.env.example` 创建 `.env`：
+
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
-| `MODEL_SERVICE_URL` | —（**必填**） | 模型服务地址（OpenAI 兼容接口，无默认值） |
-| `API_KEY` | *(内置)* | 模型服务 API Key |
+| `API_KEY` | —（**必填**） | 模型服务 API Key |
+| `MODEL_SERVICE_URL` | —（**必填**） | 模型服务地址（OpenAI 兼容接口） |
 | `MODEL_NAME` | `Qwen3.5-397B-A17B` | 模型名称 |
 | `TEMPERATURE` | `0.01` | 推理温度 |
 | `MAX_TOKENS` | `4096` | 最大输出 token |
 | `MAX_WORKERS` | `24` | 并发线程数 |
 | `API_TIMEOUT` | `300` | 单次推理超时（秒） |
 | `MAX_RETRIES` | `2` | 失败重试次数 |
+| `DOWNLOAD_TIMEOUT` | `60` | 文件下载超时（秒） |
 | `SERVICE_PORT` | `21804` | 服务监听端口 |
 | `LOG_DIR` | `./logs` | 日志目录 |
 | `LOG_KEEP_DAYS` | `7` | 日志保留天数 |
 | `LOG_MAX_MB` | `50` | 单日志文件最大 MB |
 | `MAX_FILE_SIZE_MB` | `20` | 上传文件大小上限 |
 | `TASK_TTL_MINUTES` | `10` | 异步任务结果保留时长 |
-| `TAGS_ADMIN_TOKEN` | `""（不鉴权）` | 打标配置写接口 Bearer Token；为空时跳过鉴权 |
+| `TAGS_ADMIN_TOKEN` | `""` | 打标配置写接口 Bearer Token；为空时跳过鉴权 |
+| `LANGFUSE_SECRET_KEY` | `""` | Langfuse 密钥（可选，两个 key 均填才启用追踪） |
+| `LANGFUSE_PUBLIC_KEY` | `""` | Langfuse 公钥（可选） |
+| `LANGFUSE_HOST` | `http://localhost:3100` | Langfuse 服务地址 |
 
 ---
 
 ## 日志系统
 
-### 文件存储结构
+### 文件结构
 
 ```
-logs/                                     ← LOG_DIR 环境变量控制（默认 ./logs）
+logs/
 ├── debug/
 │   └── YYYY-MM/
-│       └── debug_YYYY-MM-DD_<pid>.log   ← 全量日志（DEBUG 及以上），永久保留
+│       └── debug_YYYY-MM-DD_<pid>.log   # 全量日志（DEBUG 及以上）
 └── error/
     └── YYYY-MM/
-        └── error_YYYY-MM-DD_<pid>.log   ← 仅 ERROR 级别，永久保留
+        └── error_YYYY-MM-DD_<pid>.log   # 仅 ERROR 级别
 ```
 
-每天零点自动滚动新文件；单文件超过 50MB 时提前轮转（时间 + 大小双重触发）。文件名中 `<pid>` 默认为进程 PID，生产环境可通过 `log_pid: aihr` 改为固定标识。
+每天零点自动滚动；单文件超 50MB 提前轮转。
 
 ### 日志格式
 
-**文本格式（默认）**
-
 ```
-2026-06-02 10:30:45 | INFO  | [a1b2c3d4] [简历解析] [张三.pdf] [-] | [parser.py:128 _log_result] | 解析结果 文件: 张三.pdf 耗时: 32s
+2026-06-02 10:30:45 | INFO | [a1b2c3d4] [简历解析] [张三.pdf] [-] | [parser.py:128 _log_result] | 解析结果 文件: 张三.pdf 耗时: 32s
 ```
 
-字段依次为：`时间 | 级别 | [request_id] [业务类型] [文件名] [扩展字段] | [文件:行号 函数] | 消息`。时间强制使用北京时间（CST=UTC+8），不依赖容器 TZ 环境变量。控制台附带 ANSI 颜色，文件为纯文本。
-
-**JSON 格式**（`json_format: true`，适配 K8s/ELK/Loki/Fluentd）：每行一条单行 JSON，`set_extra_context()` 注入的字段作为顶层 key 输出。
+字段：`时间 | 级别 | [request_id] [业务类型] [文件名] [扩展] | [文件:行号 函数] | 消息`
 
 ### 每次任务的三段日志块
 
-每个异步任务完成后，`debug/` 日志中连续输出三段结构化内容：
+| 序号 | 标题 | 内容 |
+|------|------|------|
+| ① | `解析结果 文件: xxx 耗时: Ns` | 候选人基础信息摘要 + 完整解析 JSON |
+| ② | `打标结果 文件: xxx taskId: xxx` | 正向标签（含置信度）/ 风险标签 / 扣分合计 |
+| ③ | `完整输出 JSON 文件: xxx taskId: xxx` | 与接口返回完全一致的完整 JSON |
 
-| 序号 | 日志标题 | 内容 |
-|------|---------|------|
-| ① | `解析结果 文件: xxx 耗时: Ns` | 候选人基础信息 / 教育 / 工作 / 项目摘要 + 完整解析 JSON |
-| ② | `打标结果 文件: xxx taskId: xxx` | 5 维正向标签（含置信度）/ 风险标签 / 整体置信度 / 扣分合计 |
-| ③ | `完整输出 JSON 文件: xxx taskId: xxx` | v3.1 格式完整 JSON（与接口返回完全一致） |
+同步落盘到 `results/<日期>_<时间>_<姓名>_<taskId前8位>.json`。
 
-同步落盘到 `results/<日期>_<时间>_<姓名>_<taskId前8位>.json`，服务重启后可人工追溯。
-
-### 配置文件（log_config.yml）
+### 配置文件（`logger/log_config.yml`）
 
 ```yaml
 log_config:
   name: aihr
-  log_level_console: INFO      # 控制台级别；INFO 过滤 DEBUG 噪音
-  log_level_file: DEBUG        # 文件级别；通常保持 DEBUG
+  log_level_console: INFO
+  log_level_file: DEBUG
   log_folder: logs
-  log_pid: ""                  # 文件名标识；空 = 进程 PID；生产建议填 aihr
-  max_bytes: 52428800          # 单文件上限（50MB）；0 = 不限
-  use_queue: false             # Gunicorn 多 worker 时改为 true
-  json_format: false           # true = 单行 JSON（ELK/Loki 场景）
+  log_pid: ""          # 空 = 进程 PID；生产建议填固定标识
+  max_bytes: 52428800  # 50MB
+  use_queue: false     # Gunicorn 多 worker 时改为 true
+  json_format: false   # true = 单行 JSON（ELK/Loki 场景）
 ```
 
-支持热更新（watchdog 监听文件变化，200ms 防抖后自动生效，无需重启）。
-
-环境变量 `LOG_LEVEL` 可在运行时临时覆盖日志级别（优先级高于配置文件，K8s ConfigMap 场景常用）；`LOG_CONFIG_PATH` 可指定配置文件路径。
-
-### 噪音过滤
-
-`GET /health`、`HEAD /health`、`GET /favicon.ico` 的 uvicorn.access 日志自动过滤，不写入业务日志。
-
-### 业务集成方式
-
-`logger_manager.py` 通过 `config.py` 统一转发给业务模块，业务层不直接依赖 `logger_manager`：
-
-```
-logger_manager.py
-   └── config.py（re-export）
-         ├── logger / set_log_context / wrap_for_executor
-         └── get_logger_manager（lifespan 管理）
-```
-
-**生命周期**：`app.py` lifespan 启动时调用 `lm.start_config_watcher()` 开启 `log_config.yml` 热更新监听；关闭时依次调用 `stop_config_watcher()` 和 `stop_queue_listener()` 确保缓冲日志落盘。
-
-**请求上下文**：每个请求入口，`tasks._run_parse_and_tag` 调用 `set_log_context(request_id=task_id[:8], business_type="简历解析/标签打标", filename=filename)`，再用 `wrap_for_executor(fn)` 将 ContextVar 快照传入线程池线程，确保 `parser` / `tagger` 中的所有日志均携带正确的请求上下文。
-
-**三段日志的写入者**：
-
-| 段 | 写入函数 | 所在文件 | 级别 |
-|----|---------|---------|------|
-| ① 解析结果（摘要） | `_log_result()` | `parser.py` | INFO |
-| ① 完整简历 JSON | `_log_result()` | `parser.py` | DEBUG |
-| ② 打标结果 | `_log_tag_info()` | `tasks.py` | INFO |
-| ③ 完整响应 JSON | 内联 `logger.debug` | `tasks.py` | DEBUG |
-
-`DEBUG` 级别内容（完整 JSON）仅写文件，控制台默认 `INFO` 不展示。
-
-### 日志采集
-
-服务存在两条输出路径，部署模式不同，采集方式也不同：
-
-**路径一：文件（Docker Compose）**
-
-`docker-compose.yml` 将 `./logs:/app/logs` 挂载到宿主机，日志文件可直接在宿主机读取：
-
-```
-宿主机 ./logs/debug/YYYY-MM/debug_<date>_<pid>.log
-              └── Filebeat / Fluentd 采集 → Elasticsearch / Loki
-```
-
-切换 JSON 格式后，Filebeat 无需正则解析，直接 `json.keys_under_root: true` 即可按字段索引。
-
-**路径二：stdout（Kubernetes）**
-
-当前 CI/CD 的 K8s Deployment 未挂载 PVC，`/app/logs` 写入容器临时存储（Pod 重启后丢失）。K8s 自动采集 stdout，是 K8s 环境的主要日志通道：
-
-```
-uvicorn stdout（含 app logger + uvicorn.access）
-   └── kubectl logs / DaemonSet（Filebeat / Fluent Bit）→ Elasticsearch / Loki
-```
-
-生产 K8s 建议同时启用两项：
-
-1. `json_format: true`（或 `LOG_LEVEL` 环境变量）—— 让 stdout 输出结构化 JSON，方便 Loki/ES 按字段过滤
-2. 挂载 PVC 持久化 `/app/logs` —— 保留文件副本供人工追溯
-
-```yaml
-# K8s Deployment 补充配置示例
-volumes:
-  - name: logs
-    persistentVolumeClaim:
-      claimName: aihr-logs-pvc
-containers:
-  - name: aihr-ocr
-    volumeMounts:
-      - name: logs
-        mountPath: /app/logs
-    env:
-      - name: LOG_LEVEL
-        value: "INFO"          # ConfigMap 临时调整级别，无需重启
-```
-
-**本地调试**
-
-```bash
-# 实时跟踪最新 debug 日志
-tail -f logs/debug/$(date +%Y-%m)/debug_$(date +%Y-%m-%d)_*.log
-
-# K8s Pod 日志（最近 100 行）
-kubectl logs -n demo -l app=aihr-ocr --tail=100 -f
-```
+支持热更新（watchdog 监听，200ms 防抖后自动生效，无需重启）。
 
 ---
 
 ## 本地启动
 
 ```bash
+cp .env.example .env
+# 编辑 .env，填写 API_KEY 和 MODEL_SERVICE_URL
+
 pip install -r requirements.txt
 uvicorn app:app --host 0.0.0.0 --port 21804
 ```
@@ -306,14 +228,22 @@ uvicorn app:app --host 0.0.0.0 --port 21804
 ## Docker 部署
 
 ```bash
-# 构建镜像
-docker build -t aihr-ocr:latest .
+cp .env.example .env
+# 编辑 .env，填写必填项
 
-# 运行容器
-docker run -d \
-  -p 21804:21804 \
-  -e MODEL_SERVICE_URL=http://<your-llm-host>:13001/v1 \
-  aihr-ocr:latest
+docker compose up --build -d
+```
+
+查看日志：
+
+```bash
+docker logs -f ai-resume-parsertag
+```
+
+健康检查：
+
+```bash
+curl http://localhost:21804/health
 ```
 
 CI/CD 通过 GitLab Pipeline 自动构建并部署到 Kubernetes（`demo` 命名空间，NodePort `30804`），触发分支：`dev` / `main`。
@@ -322,7 +252,7 @@ CI/CD 通过 GitLab Pipeline 自动构建并部署到 Kubernetes（`demo` 命名
 
 ## 打标配置热更新
 
-打标维度配置支持运行时修改，无需重启服务。修改后写入 `schemas/tag_config_runtime.json`，服务重启后自动加载；调用 `POST /api/tags/config/reset` 可恢复默认配置。
+打标维度支持运行时修改，无需重启。修改后写入 `schemas/tag_config_runtime.json`，服务重启后自动加载；调用 `POST /api/tags/config/reset` 可恢复默认配置。
 
 ---
 
@@ -330,7 +260,7 @@ CI/CD 通过 GitLab Pipeline 自动构建并部署到 Kubernetes（`demo` 命名
 
 ```bash
 # 单文件打标测试
-python test/test_tagging.py --file uploads/test_full/PKU刘旗简历.pdf
+python test/test_tagging.py --file uploads/test_full/张三.pdf
 
 # 批量打标测试
 python test/test_tagging.py --all

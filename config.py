@@ -17,7 +17,7 @@ from dotenv import load_dotenv
 # 本地开发：自动加载同目录 .env；生产容器不存在 .env 时静默跳过
 load_dotenv()
 
-from logger_manager import (        # noqa: F401  供其他模块 from config import
+from logger.logger_manager import (  # noqa: F401  供其他模块 from config import
     logger,
     set_log_context,
     set_extra_context,

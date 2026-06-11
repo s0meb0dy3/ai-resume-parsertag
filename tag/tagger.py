@@ -14,9 +14,9 @@ from .tag_data import (
     EDUCATION_HIERARCHY,
 )
 from .tag_config import POSITIVE_DIMENSIONS, NEGATIVE_DIMENSIONS, SEVERITY_DEDUCTION
-from prompts import POSITIVE_TAG_PROMPT_TPL, POSITIVE_TAG_SCHEMA, TAGGER_SYSTEM
+from core.prompts import POSITIVE_TAG_PROMPT_TPL, POSITIVE_TAG_SCHEMA, TAGGER_SYSTEM
 from config import logger  # 统一使用带 ContextVar 上下文的 logger
-from langfuse_client import observe
+from logger.langfuse_client import observe
 
 _RUNTIME_CFG_FILE = pathlib.Path(__file__).parent.parent / "schemas" / "tag_config_runtime.json"
 

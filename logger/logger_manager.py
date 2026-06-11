@@ -18,13 +18,13 @@
 快速接入（其他项目）
 ────────────────────
   # 方式一：放同目录，自动发现 log_config.yml
-  from logger_manager import logger, set_log_context
+  from logger.logger_manager import logger, set_log_context
 
   # 方式二：环境变量指定配置路径
   LOG_CONFIG_PATH=/etc/myapp/log_config.yml python app.py
 
   # 方式三：编程式初始化
-  from logger_manager import LoggerManager, initialize_logger
+  from logger.logger_manager import LoggerManager, initialize_logger
   lm  = LoggerManager('/path/to/log_config.yml')
   log = initialize_logger(lm, default_log_name='myapp')
 
@@ -745,7 +745,7 @@ def get_logger_manager() -> LoggerManager:
 # ══════════════════════════════════════════════════════════════════
 # 向后兼容：模块级 logger / set_log_context 直接导入
 # ══════════════════════════════════════════════════════════════════
-# 现有代码 `from logger_manager import logger, set_log_context` 无需任何修改
+# 现有代码 `from logger.logger_manager import logger, set_log_context` 无需任何修改
 
 class _LazyProxy:
     """将属性访问代理到 get_logger()，实现 logger 的懒加载。"""

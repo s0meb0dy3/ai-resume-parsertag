@@ -7,8 +7,8 @@ import asyncio
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-from parser import _llm_call
-from tasks import executor
+from core.parser import _llm_call
+from core.tasks import executor
 
 router = APIRouter()
 

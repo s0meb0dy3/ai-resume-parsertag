@@ -17,10 +17,10 @@ from datetime import datetime
 from typing import Optional
 
 from config import MAX_WORKERS, TASK_TTL_MINUTES, logger, wrap_for_executor, set_log_context
-from parser import _llm_call, _parse_with_logging, _save_result
-from postprocess import _conform_to_template
+from core.parser import _llm_call, _parse_with_logging, _save_result
+from core.postprocess import _conform_to_template
 from tag.tagger import run_tagging
-from langfuse_client import observe, propagate_attributes, update_current_observation, LANGFUSE_TAGS
+from logger.langfuse_client import observe, propagate_attributes, update_current_observation, LANGFUSE_TAGS
 
 # ── 全局线程池 ────────────────────────────────────────────────────
 # thread_name_prefix 让线程名出现在日志/traceback，便于定位阻塞问题

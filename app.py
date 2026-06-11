@@ -29,9 +29,9 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import get_logger_manager
-from logger_manager import _thread_local
-from parser import _cleanup_uploads
-from tasks import _periodic_cleanup, executor
+from logger.logger_manager import _thread_local
+from core.parser import _cleanup_uploads
+from core.tasks import _periodic_cleanup, executor
 
 from api.routes_async     import router as async_router
 from api.routes_openai    import router as openai_router
@@ -52,7 +52,7 @@ async def lifespan(app: FastAPI):
     lm.stop_queue_listener()
 
 
-app = FastAPI(title="AIHR Resume Parser", version="3.1.0", lifespan=lifespan)
+app = FastAPI(title="AI-Resume-ParserTag", version="3.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

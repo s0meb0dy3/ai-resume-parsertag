@@ -11,6 +11,7 @@ import asyncio
 import json
 import time
 import uuid
+from datetime import datetime
 from typing import List, Optional, Union
 
 from fastapi import APIRouter
@@ -18,9 +19,11 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from config import MAX_WORKERS, logger, set_log_context, wrap_for_executor
-from file_utils import get_pdf_source_from_content
-from parser import _parse_with_logging
-from tasks import TaskRecord, _STATUS_DESC, _run_parse_and_tag, _task_lock, _task_store, executor
+from utils.file_utils import get_pdf_source_from_content
+from core.parser import _llm_call, _parse_with_logging
+from core.postprocess import _conform_to_template
+from tag.tagger import run_tagging
+from core.tasks import TaskRecord, _STATUS_DESC, _run_parse_and_tag, _task_lock, _task_store, _parse_semaphore, executor
 
 router = APIRouter()
 
@@ -344,6 +347,193 @@ async def batch_parse_resumes(request: dict):
         elif rec and rec.status == 4:
             data["errorMsg"] = rec.error_msg
         results.append({"code": 0, "msg": "success", "data": data})
+
+    success = sum(1 for r in results if r.get("code") == 0 and r.get("data", {}).get("status") == 3)
+    return JSONResponse(content={
+        "total":     len(results),
+        "success":   success,
+        "failed":    len(results) - success,
+        "elapsed_s": round(time.time() - t0, 2),
+        "results":   results,
+    })
+
+
+@router.post("/api/resume/sync/parse")
+async def sync_parse_resumes(request: dict):
+    """
+    同步批量解析（仅解析，不打标），阻塞等待全部完成后返回简历结构化 JSON。
+    results[].data.resume 为解析后的原始简历 JSON，可直接作为 /api/resume/sync/tag 的输入。
+    单次上限 50 份；max_concurrency 控制并发上限（1~30，默认同 MAX_WORKERS）。
+    请求体字段与 /api/resume/sync/batch 完全一致（resumes 数组，每项含 type / file / text）。
+    """
+    t0           = time.time()
+    resume_items = request.get("resumes", [])
+    max_conc     = min(int(request.get("max_concurrency", MAX_WORKERS)), 30)
+
+    if not resume_items:
+        return JSONResponse(status_code=400, content={"error": "resumes 数组不能为空"})
+    if len(resume_items) > 50:
+        return JSONResponse(status_code=400, content={"error": "单次最多处理 50 份简历"})
+
+    loop = asyncio.get_running_loop()
+
+    # 下载/读取每份简历文件（同步完成，失败直接标记 error）
+    prepared = []
+    for item in resume_items:
+        file_meta = item.get("file", {})
+        filename  = file_meta.get("name", "resume.pdf")
+        extra     = file_meta.get("extra") or item.get("extra") or None
+        try:
+            source, fn = await loop.run_in_executor(executor, get_pdf_source_from_content, [item])
+        except Exception as e:
+            prepared.append({"filename": filename, "extra": extra, "error": str(e), "source": None})
+            continue
+        if source is None:
+            prepared.append({"filename": filename, "extra": extra,
+                              "error": "无法获取 PDF，请检查 type/path/content 字段", "source": None})
+            continue
+        prepared.append({"filename": fn or filename, "extra": extra, "source": source, "error": None})
+
+    sem = asyncio.Semaphore(max_conc)
+
+    async def _parse_one(p: dict):
+        if p["error"]:
+            return
+        async with sem:
+            async with _parse_semaphore:
+                try:
+                    set_log_context(request_id=uuid.uuid4().hex[:8],
+                                    business_type="简历解析", filename=p["filename"])
+                    p["resume"] = await loop.run_in_executor(
+                        executor,
+                        wrap_for_executor(_parse_with_logging),
+                        p["source"], p["filename"],
+                    )
+                    p["parse_time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                except Exception as e:
+                    p["error"]      = str(e)
+                    p["resume"]     = None
+                    p["parse_time"] = ""
+
+    await asyncio.gather(*[_parse_one(p) for p in prepared])
+
+    results = []
+    for p in prepared:
+        if p.get("error") or p.get("resume") is None:
+            err_msg = p.get("error", "解析失败")
+            results.append({
+                "code": 1,
+                "msg":  err_msg,
+                "data": {
+                    "filename": p["filename"],
+                    "extra":    p["extra"],
+                    "errorMsg": err_msg,
+                },
+            })
+        else:
+            results.append({
+                "code": 0,
+                "msg":  "success",
+                "data": {
+                    "filename":             p["filename"],
+                    "extra":                p["extra"],
+                    "resumeParseFinishTime": p["parse_time"],
+                    "resume":               p["resume"],
+                },
+            })
+
+    success = sum(1 for r in results if r.get("code") == 0)
+    return JSONResponse(content={
+        "total":     len(results),
+        "success":   success,
+        "failed":    len(results) - success,
+        "elapsed_s": round(time.time() - t0, 2),
+        "results":   results,
+    })
+
+
+@router.post("/api/resume/sync/tag")
+async def sync_tag_resumes(request: dict):
+    """
+    同步批量打标（仅打标，不解析），阻塞等待全部完成后返回。
+    输入中 resumes 数组的每项结构与 /api/resume/sync/parse 响应的 results[].data 字段完全一致：
+      filename / extra / resumeParseFinishTime / resume（必填，解析后的简历 JSON）。
+    输出格式与 /api/resume/sync/batch 完全一致，results[].data.result 包含解析+打标完整 JSON。
+    单次上限 50 份；max_concurrency 控制并发上限（1~30，默认同 MAX_WORKERS）。
+    支持 jobTitle / requiredSkills / jobDescription / jobSensitiveWords 岗位信息字段。
+    """
+    t0           = time.time()
+    resume_items = request.get("resumes", [])
+    max_conc     = min(int(request.get("max_concurrency", MAX_WORKERS)), 30)
+    job_info     = {k: request.get(k, "") or ""
+                    for k in ("jobTitle", "requiredSkills", "jobDescription", "jobSensitiveWords")}
+
+    if not resume_items:
+        return JSONResponse(status_code=400, content={"error": "resumes 数组不能为空"})
+    if len(resume_items) > 50:
+        return JSONResponse(status_code=400, content={"error": "单次最多处理 50 份简历"})
+
+    loop = asyncio.get_running_loop()
+    sem  = asyncio.Semaphore(max_conc)
+
+    async def _tag_one(item: dict) -> dict:
+        filename          = item.get("filename", "resume.pdf")
+        extra             = item.get("extra")
+        resume_parse_time = item.get("resumeParseFinishTime", "")
+        resume            = item.get("resume")
+        task_id           = str(uuid.uuid4())
+
+        if not isinstance(resume, dict):
+            return {
+                "code": 1,
+                "msg":  "resume 字段缺失或格式错误",
+                "data": {
+                    "taskId": task_id, "status": 4, "statusDesc": "任务失败",
+                    "elapsedSeconds": 0, "estimatedSeconds": 90,
+                    "extra": extra, "errorMsg": "resume 字段缺失或格式错误",
+                },
+            }
+
+        async with sem:
+            tag_start = time.time()
+            try:
+                set_log_context(request_id=task_id[:8],
+                                business_type="标签打标", filename=filename)
+                _resume   = resume
+                _job_info = job_info
+                tag_info  = await loop.run_in_executor(
+                    executor,
+                    wrap_for_executor(lambda: run_tagging(_resume, _job_info, llm_call_fn=_llm_call)),
+                )
+                elapsed = round(time.time() - tag_start, 1)
+                result  = _conform_to_template(task_id, resume, tag_info, resume_parse_time)
+                return {
+                    "code": 0,
+                    "msg":  "success",
+                    "data": {
+                        "taskId":           task_id,
+                        "status":           3,
+                        "statusDesc":       "任务完成",
+                        "elapsedSeconds":   elapsed,
+                        "estimatedSeconds": 90,
+                        "extra":            extra,
+                        "result":           result,
+                    },
+                }
+            except Exception as e:
+                logger.error(f"[{task_id}] 打标失败: {e}")
+                return {
+                    "code": 1,
+                    "msg":  str(e),
+                    "data": {
+                        "taskId": task_id, "status": 4, "statusDesc": "任务失败",
+                        "elapsedSeconds": round(time.time() - tag_start, 1),
+                        "estimatedSeconds": 90,
+                        "extra": extra, "errorMsg": str(e),
+                    },
+                }
+
+    results = list(await asyncio.gather(*[_tag_one(item) for item in resume_items]))
 
     success = sum(1 for r in results if r.get("code") == 0 and r.get("data", {}).get("status") == 3)
     return JSONResponse(content={

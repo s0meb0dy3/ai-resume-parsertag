@@ -2,7 +2,7 @@ log_config:
   name: aihr
   log_level_console: INFO     # 控制台输出级别；INFO 过滤 DEBUG 噪音（健康检查等）
   log_level_file: DEBUG       # debug 目录文件输出级别；通常保持 DEBUG
-  log_folder: logs
+  log_folder: ../logs
   log_pid: ""                 # 日志文件标识；空则使用进程 PID；生产建议填服务名如 aihr
   max_bytes: 52428800         # 单文件大小上限（50 MB）；超出立即轮转；0 表示不限
   to_console: true

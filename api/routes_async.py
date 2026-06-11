@@ -19,8 +19,8 @@ from fastapi import APIRouter, File, Form, UploadFile
 from fastapi.responses import JSONResponse
 
 from config import ALLOWED_EXTENSIONS, MAX_FILE_SIZE_MB, MAX_WORKERS, logger, set_log_context
-from file_utils import get_pdf_source_from_content
-from tasks import (
+from utils.file_utils import get_pdf_source_from_content
+from core.tasks import (
     TaskRecord,
     _STATUS_DESC,
     _run_parse_and_tag,

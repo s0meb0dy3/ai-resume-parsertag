@@ -335,7 +335,9 @@ SEVERITY_DEDUCTION = {"low": -5, "medium": -10, "high": -20}
     ├─ POST /api/resume/async/batch            ← 批量异步（JSON，type=url，≤20份）
     ├─ POST /api/resume/async/batch/multiform  ← 批量异步（files + urls 混合，≤20份）
     ├─ GET  /api/resume/async/result           ← 轮询结果
-    └─ POST /api/resume/sync/batch             ← 同步批量（url/file/base64，≤50份，阻塞等待）
+    ├─ POST /api/resume/sync/batch             ← 同步批量（url/file/base64，≤50份，阻塞等待）
+    ├─ POST /api/resume/sync/parse             ← 同步批量解析（仅解析，返回结构化 JSON）
+    └─ POST /api/resume/sync/tag               ← 同步批量打标（输入解析 JSON，返回完整结果）
 
 AIHR Python 服务（FastAPI v3.1.0，端口 21804）
     │
@@ -1742,6 +1744,171 @@ GET /api/tasks?status=3  ← 只返回"已完成"任务
 
 ---
 
+### 6.9 同步解析与打标拆分接口
+
+两个接口**完全独立**，可单独调用，也可串联使用：先调用 `/api/resume/sync/parse` 解析 PDF，将返回的 `results[].data` 数组传入 `/api/resume/sync/tag` 完成打标。
+
+**串联调用示意**
+
+```
+① POST /api/resume/sync/parse   （上传 PDF → 返回结构化简历 JSON）
+       ↓  results[].data
+  ┌─ 调用方可在此介入 ─────────────────────────────────────────┐
+  │  · 将 resume JSON 存入业务数据库                            │
+  │  · 筛选符合条件的候选人再打标                                │
+  │  · 按不同岗位传入不同 jobTitle / requiredSkills             │
+  └────────────────────────────────────────────────────────────┘
+② POST /api/resume/sync/tag     （传入 resume JSON + 岗位信息 → 返回完整 v3.1 JSON）
+```
+
+> **适用场景**：需要"先解析入库、后按岗位打标"的业务流程；或解析与打标分开部署/分批调度的场景。
+
+---
+
+#### `POST /api/resume/sync/parse`
+
+同步批量**纯解析**（不执行打标），阻塞等待全部完成后返回各份简历的结构化 JSON。输出 `results[].data` 可直接作为 `/api/resume/sync/tag` 的 `resumes` 数组传入，字段结构完全匹配，无需转换。
+
+**请求体（Content-Type: application/json）**
+
+与 `/api/resume/sync/batch` 完全一致（支持 `url` / `file` / `base64` 三种来源，单次上限 50 份）：
+
+```json
+{
+  "resumes": [
+    {"type": "url",  "file": {"name": "a.pdf", "path": "http://minio/resumes/a.pdf", "extra": "userId_001"}},
+    {"type": "file", "file": {"name": "b.pdf", "path": "/app/uploads/b.pdf"}}
+  ],
+  "max_concurrency": 4
+}
+```
+
+> 无需传 `jobTitle` / `requiredSkills` / `jobDescription` / `jobSensitiveWords`（仅打标阶段使用）
+
+**响应格式**
+
+```json
+{
+  "total": 2,
+  "success": 2,
+  "failed": 0,
+  "elapsed_s": 32.1,
+  "results": [
+    {
+      "code": 0,
+      "msg": "success",
+      "data": {
+        "filename": "a.pdf",
+        "extra": "userId_001",
+        "resumeParseFinishTime": "2026-06-10 10:00:05",
+        "resume": {
+          "candidate": {"name": "张三", "phone": "13800138000", "...": "..."},
+          "educations": [{"school": "复旦大学", "...": "..."}],
+          "works": [{"company": "阿里巴巴", "...": "..."}],
+          "projects": []
+        }
+      }
+    },
+    {
+      "code": 1,
+      "msg": "无法获取 PDF，请检查 type/path/content 字段",
+      "data": {
+        "filename": "b.pdf",
+        "extra": null,
+        "errorMsg": "无法获取 PDF，请检查 type/path/content 字段"
+      }
+    }
+  ]
+}
+```
+
+**响应字段说明**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `data.filename` | string | 文件名，来自请求 `file.name` |
+| `data.extra` | string\|null | 调用方透传字段，原样返回 |
+| `data.resumeParseFinishTime` | string | 本次解析完成时间（`YYYY-MM-DD HH:mm:ss`） |
+| `data.resume` | object | 结构化简历 JSON（`candidate` / `educations` / `works` / `projects`），可直接传入打标接口 |
+
+---
+
+#### `POST /api/resume/sync/tag`
+
+同步批量**纯打标**（不执行解析），阻塞等待全部完成后返回完整结果。`resumes` 数组每项结构与 `/api/resume/sync/parse` 响应的 `results[].data` 字段**完全一致**，可直接透传。
+
+**请求体（Content-Type: application/json）**
+
+```json
+{
+  "resumes": [
+    {
+      "filename": "a.pdf",
+      "extra": "userId_001",
+      "resumeParseFinishTime": "2026-06-10 10:00:05",
+      "resume": {
+        "candidate": {"name": "张三", "...": "..."},
+        "educations": [...],
+        "works": [...],
+        "projects": []
+      }
+    }
+  ],
+  "jobTitle": "算法工程师",
+  "requiredSkills": "Python,机器学习",
+  "jobDescription": "...",
+  "jobSensitiveWords": "竞业,保密协议",
+  "max_concurrency": 4
+}
+```
+
+**请求字段说明**
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|:----:|------|
+| `resumes` | Array | ✅ | 简历列表，每项为解析接口 `results[].data`，上限 50 份 |
+| `resumes[].resume` | object | ✅ | 结构化简历 JSON（解析接口的 `data.resume` 字段） |
+| `resumes[].filename` | string | ✗ | 文件名，用于日志标识 |
+| `resumes[].extra` | string | ✗ | 透传字段，原样返回 |
+| `resumes[].resumeParseFinishTime` | string | ✗ | 解析完成时间，原样写入输出 `result.resumeParseFinishTime` |
+| `jobTitle` | string | ✗ | 目标岗位名称 |
+| `requiredSkills` | string | ✗ | 必要技能，逗号分隔 |
+| `jobDescription` | string | ✗ | JD 全文 |
+| `jobSensitiveWords` | string | ✗ | 自定义敏感词，逗号/分号分隔 |
+| `max_concurrency` | int | ✗ | 并发数上限 1~30，默认同 `MAX_WORKERS` |
+
+**响应格式**
+
+与 `/api/resume/sync/batch` 完全一致，每条 `data.result` 为完整 v3.1 JSON（含解析字段 + 正负向标签）：
+
+```json
+{
+  "total": 1,
+  "success": 1,
+  "failed": 0,
+  "elapsed_s": 8.3,
+  "results": [
+    {
+      "code": 0,
+      "msg": "success",
+      "data": {
+        "taskId": "uuid-a",
+        "status": 3,
+        "statusDesc": "任务完成",
+        "elapsedSeconds": 8.1,
+        "estimatedSeconds": 90,
+        "extra": "userId_001",
+        "result": { "...": "完整 v3.1 JSON，见第7节" }
+      }
+    }
+  ]
+}
+```
+
+**并发机制**：`asyncio.gather` 并发打标，batch 级 `Semaphore(max_concurrency)` 限流；打标阶段不占 `_parse_semaphore`，与正在进行的解析任务互不阻塞。每次调用生成新的 `taskId`，不写入 `_task_store`（纯同步无需轮询）。
+
+---
+
 ## 7. 统一输出 JSON 规范（v3.1）
 
 ### 7.1 顶层字段
@@ -2335,7 +2502,9 @@ else:
 | GET | `/health` | 健康检查 | 已有 |
 | GET | `/v1/models` | OpenAI 兼容模型列表 | 已有 |
 | POST | `/v1/chat/completions` | OpenAI 兼容对接（DeepSeek-OCR / DeepSeek-OCR-JSON / AIHR-Resume） | 已有 |
-| POST | `/api/resume/sync/batch` | 同步批量解析+打标（≤50，url/file/base64，直接返回完整结果） | 新增 |
+| POST | `/api/resume/sync/batch` | 同步批量解析+打标（≤50，url/file/base64，直接返回完整结果） | 已有 |
+| POST | `/api/resume/sync/parse` | 同步批量仅解析（≤50，返回结构化简历 JSON，不打标） | 新增 |
+| POST | `/api/resume/sync/tag` | 同步批量仅打标（输入解析 JSON + 岗位信息，返回完整 v3.1 结果） | 新增 |
 | POST | `/api/resume/async/parse` | 单文件异步解析+打标 | 已有 |
 | GET | `/api/resume/async/result` | 轮询任务结果 | 已有 |
 | POST | `/api/resume/async/batch` | 批量异步（JSON，type=url，≤20） | 已有 |

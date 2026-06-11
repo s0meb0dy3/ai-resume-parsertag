@@ -13,7 +13,7 @@ import json_repair
 import requests
 
 from config import UPLOAD_DIR, DOWNLOAD_TIMEOUT
-from logger_manager import logger
+from logger.logger_manager import logger
 
 
 def download_file(url: str, filename: str) -> str:
