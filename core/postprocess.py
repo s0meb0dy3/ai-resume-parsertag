@@ -15,13 +15,18 @@ from core.prompts import SCHEMA_KEYS, CANDIDATE_KEYS, EDU_KEYS, WORK_KEYS, PROJ_
 from tag.tag_data import classify_education
 from tag import load_tag_cfg
 
+# education / workYears 由规则层确定性计算，输出置信度会误导调用方（规则结果无概率含义）
 _NO_CONF_DIM = {"education", "workYears"}
 
 
 def _build_display_maps(cfg: dict) -> tuple[dict, dict]:
-    """从运行时配置构建 displayName 查找表，每次打标使用最新配置。"""
-    pos = {d["dimension"]: d["displayName"] for d in cfg.get("positiveDimensions", [])}
-    neg = {d["displayName"]: (d["dimension"], d["displayName"]) for d in cfg.get("negativeDimensions", [])}
+    """从运行时配置构建 displayName 查找表，只包含 enabled=True 的维度。
+    pos 同时作为"允许输出"的白名单：不在其中的维度在 _conform_to_template 中被过滤掉。
+    """
+    pos = {d["dimension"]: d["displayName"]
+           for d in cfg.get("positiveDimensions", []) if d.get("enabled", True)}
+    neg = {d["displayName"]: (d["dimension"], d["displayName"])
+           for d in cfg.get("negativeDimensions", []) if d.get("enabled", True)}
     return pos, neg
 
 
@@ -115,9 +120,11 @@ def _merge_str(a: str, b: str) -> str:
     a, b = (a or "").strip(), (b or "").strip()
     if not a: return b
     if not b: return a
+    # 取较长值：跨批次合并时，字段聚焦的那页通常描述更完整，长度更长
     return a if len(a) >= len(b) else b
 
 
+# 身份字段以首页提取为准：封面页格式最规范，后续页重复出现时往往不完整或截断
 _FIRST_WINS = {"name", "phone", "email"}
 
 
@@ -140,6 +147,7 @@ def _dedup(items: list, keys: list) -> list:
         if not isinstance(item, dict):
             continue
         key = tuple(str(item.get(f, "")).strip() for f in keys)
+        # any(k for k in key)：过滤全空条目（所有关键字段均为空字符串）
         if key not in seen and any(k for k in key):
             seen.add(key)
             out.append(item)
@@ -196,17 +204,23 @@ def _conform_to_template(task_id: str, resume: dict, tag_info: dict, resume_pars
     edu_entry    = None
 
     for tag in tag_info.get("positiveTags", []):
-        dim     = tag.get("dimension", "")
+        dim = tag.get("dimension", "")
+        # 维度已从配置删除或被禁用时跳过，防止 LLM/规则层输出的残留标签污染响应
+        if dim not in _positive_display:
+            continue
         arr_key = f"{dim}ValueArray"
         values  = tag.get(arr_key, [])
         src     = tag.get("source", "ai")
         entry: dict = {
             "dimension":   dim,
-            "displayName": _positive_display.get(dim, dim),
+            "displayName": _positive_display[dim],
         }
         if dim not in _NO_CONF_DIM:
             entry["confidence"] = tag["confidence"] if tag.get("confidence") is not None else overall_conf
         entry["value"] = [{"tag": v, "source": src} for v in values]
+        # 跳过 value 为空的非固定维度（LLM 输出空数组表示无匹配，无需透出）
+        if not entry["value"] and dim not in ("education", "workYears"):
+            continue
         tags_array.append(entry)
         if dim == "education":
             edu_entry = entry

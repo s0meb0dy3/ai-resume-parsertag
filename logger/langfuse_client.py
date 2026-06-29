@@ -1,8 +1,5 @@
 """
-Langfuse v2 可观测性客户端单例（兼容 Langfuse server 2.x）。
-
-Langfuse SDK v3+ 改用 OTEL 传输，需要 Langfuse server v3+。
-本项目使用 Langfuse server 2.x，因此锁定 SDK < 3.0.0。
+Langfuse v3/v4 可观测性客户端单例（基于 OTEL 传输）。
 
 LANGFUSE_SECRET_KEY / LANGFUSE_PUBLIC_KEY 未配置时自动降级为空操作，
 不影响主流程，服务可在无 Langfuse 的环境中正常启动。
@@ -14,46 +11,26 @@ import os
 
 LANGFUSE_SECRET_KEY = os.getenv("LANGFUSE_SECRET_KEY", "")
 LANGFUSE_PUBLIC_KEY = os.getenv("LANGFUSE_PUBLIC_KEY", "")
-LANGFUSE_HOST       = os.getenv("LANGFUSE_HOST", "http://localhost:3100")
+LANGFUSE_HOST       = os.getenv("LANGFUSE_BASE_URL", os.getenv("LANGFUSE_HOST", "http://localhost:3100"))
 LANGFUSE_TAGS       = [t.strip() for t in os.getenv("LANGFUSE_TAGS", "").split(",") if t.strip()]
+_media_upload_enabled = os.getenv("LANGFUSE_MEDIA_UPLOAD_ENABLED", "false").lower() == "true"
 
 _enabled = bool(LANGFUSE_SECRET_KEY and LANGFUSE_PUBLIC_KEY)
 
 if _enabled:
-    from langfuse import Langfuse
-    from langfuse.decorators import observe, langfuse_context  # noqa: F401
+    from langfuse import Langfuse, observe, propagate_attributes, get_client  # noqa: F401
 
     def update_current_observation(**kwargs):
         """将当前 span 的 output / metadata 等字段写入 Langfuse。"""
-        langfuse_context.update_current_observation(**kwargs)
+        get_client().update_current_span(**kwargs)
 
     langfuse = Langfuse(
         secret_key=LANGFUSE_SECRET_KEY,
         public_key=LANGFUSE_PUBLIC_KEY,
         host=LANGFUSE_HOST,
+        # media_upload_thread_count=0 可彻底禁用媒体上传线程
+        media_upload_thread_count=0 if not _media_upload_enabled else None,
     )
-
-    class propagate_attributes:
-        """
-        langfuse v2 没有 propagate_attributes；
-        用 langfuse_context.update_current_trace() 模拟相同效果。
-        """
-        def __init__(self, tags=None, session_id=None, user_id=None, **kwargs):
-            self._update = {}
-            if tags:
-                self._update["tags"] = tags
-            if session_id:
-                self._update["session_id"] = session_id
-            if user_id:
-                self._update["user_id"] = user_id
-
-        def __enter__(self):
-            if self._update:
-                langfuse_context.update_current_trace(**self._update)
-            return self
-
-        def __exit__(self, *args):
-            pass
 
 else:
     langfuse = None  # type: ignore[assignment]

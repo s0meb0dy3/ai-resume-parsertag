@@ -1,7 +1,7 @@
 services:
   ai-resume-parsertag:
     build: .
-    image: ai-resume-parsertag:latest
+    image: ai-resume-parsertag:v3.1.0-20260629
     container_name: ai-resume-parsertag
     restart: unless-stopped
     ports:
@@ -11,7 +11,7 @@ services:
       - ./logs:/app/logs
       - ./uploads:/app/uploads
       - ./results:/app/results
-      - ./schemas/tag_config_runtime.json:/app/schemas/tag_config_runtime.json
+      - ./schemas:/app/schemas
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:21804/health')"]
       interval: 30s

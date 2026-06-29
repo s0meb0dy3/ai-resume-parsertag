@@ -1,6 +1,7 @@
 """
 简历打标模块：正向标签提取 + 敏感词/风险检测
 """
+import copy
 import re
 import json
 import pathlib
@@ -14,7 +15,11 @@ from .tag_data import (
     EDUCATION_HIERARCHY,
 )
 from .tag_config import POSITIVE_DIMENSIONS, NEGATIVE_DIMENSIONS, SEVERITY_DEDUCTION
-from core.prompts import POSITIVE_TAG_PROMPT_TPL, POSITIVE_TAG_SCHEMA, TAGGER_SYSTEM
+from core.prompts import (
+    POSITIVE_PROMPT_HEADER, DIM_PROMPT, GENERIC_DIM_PROMPT, POSITIVE_TAG_SCHEMA,
+    NEGATIVE_PROMPT_HEADER, GENERIC_NEG_DIM_PROMPT, NEGATIVE_TAG_SCHEMA,
+    TAGGER_SYSTEM,
+)
 from config import logger  # 统一使用带 ContextVar 上下文的 logger
 from logger.langfuse_client import observe
 
@@ -26,12 +31,14 @@ _cfg_cache_mtime: float = -1.0
 
 
 def _tagger_load_cfg() -> dict:
-    """读取运行时配置（mtime 缓存：文件未修改时直接返回上次结果，避免并发时重复 IO）。"""
+    """读取运行时配置（mtime 缓存：文件未修改时直接返回上次结果，避免并发时重复 IO）。
+    返回浅拷贝：防止调用方对顶层键赋值时意外污染缓存（嵌套列表仍为只读约定）。
+    """
     global _cfg_cache, _cfg_cache_mtime
     if _RUNTIME_CFG_FILE.exists():
         mtime = _RUNTIME_CFG_FILE.stat().st_mtime
         if _cfg_cache and mtime == _cfg_cache_mtime:
-            return _cfg_cache
+            return copy.copy(_cfg_cache)
         with open(_RUNTIME_CFG_FILE, encoding="utf-8") as f:
             _cfg_cache = json.load(f)
         _cfg_cache_mtime = mtime
@@ -42,7 +49,7 @@ def _tagger_load_cfg() -> dict:
             "severityDeduction":  dict(SEVERITY_DEDUCTION),
         }
         _cfg_cache_mtime = -1.0
-    return _cfg_cache
+    return copy.copy(_cfg_cache)
 
 # ── 正向标签提取 ──────────────────────────────────────────────────
 
@@ -50,24 +57,50 @@ def _tagger_load_cfg() -> dict:
 def _build_positive_prompt(pos_dims: list, resume_json: str,
                            job_title: str, required_skills: str,
                            job_description: str) -> str:
-    """根据运行时正向维度配置生成完整 LLM prompt，枚举值实时从配置读取。"""
-    def _pipe(dim: str) -> str:
-        for d in pos_dims:
-            if d["dimension"] == dim:
-                return "|".join(v for v in (d.get("allowedValues") or []) if v)
-        return ""
+    """按运行时 pos_dims 动态拼装 LLM prompt。
+    已知维度使用详细提取指令，API 新增的自定义维度自动使用通用指令模板。
+    新增/删除/禁用维度后下次打标 prompt 立即反映变更，无需改代码。
+    """
+    sections = []
+    custom_schema_entries: list[dict] = []
 
-    return POSITIVE_TAG_PROMPT_TPL.format(
+    for d in pos_dims:
+        if not d.get("enabled", True):
+            continue
+        dim    = d["dimension"]
+        values = "|".join(v for v in (d.get("allowedValues") or []) if v)
+
+        if dim in DIM_PROMPT:
+            tpl = DIM_PROMPT[dim]
+            sections.append(tpl.format(values=values) if "{values}" in tpl else tpl)
+        else:
+            sections.append(GENERIC_DIM_PROMPT.format(
+                dimension=dim,
+                display_name=d.get("displayName", dim),
+                values=values or "（allowedValues 为空，自由提取相关标签）",
+            ))
+            # 向 schema 示例追加自定义维度占位条目，确保 LLM 知道输出格式
+            custom_schema_entries.append({
+                "dimension": dim,
+                f"{dim}ValueArray": ["示例标签A"],
+                "source": "ai",
+                "confidence": 0.85,
+            })
+
+    # 若存在自定义维度，动态扩充 schema 示例（深拷贝避免污染原始常量）
+    if custom_schema_entries:
+        schema = copy.deepcopy(POSITIVE_TAG_SCHEMA)
+        schema["positiveTags"].extend(custom_schema_entries)
+    else:
+        schema = POSITIVE_TAG_SCHEMA
+
+    return POSITIVE_PROMPT_HEADER.format(
         resume_json=resume_json,
         job_title=job_title,
         required_skills=required_skills,
         job_description=job_description,
-        schema_example=json.dumps(POSITIVE_TAG_SCHEMA, ensure_ascii=False, indent=2),
-        edu_values=_pipe("education"),
-        company_bg_values=_pipe("companyBg"),
-        work_years_values=_pipe("workYears"),
-        industry_values=_pipe("industry"),
-    )
+        schema_example=json.dumps(schema, ensure_ascii=False, indent=2),
+    ) + "\n\n".join(sections)
 
 
 def _parse_date(date_str: str) -> Optional[datetime]:
@@ -120,17 +153,6 @@ def _build_allowed(dim: str, pos_dims=None) -> set:
     return {v for d in dims if d["dimension"] == dim for v in d["allowedValues"]}
 
 
-_ALLOWED_EDU        = _build_allowed("education")
-_ALLOWED_WORKYEARS  = _build_allowed("workYears")
-_ALLOWED_COMPANY_BG = _build_allowed("companyBg")
-_ALLOWED_INDUSTRY   = _build_allowed("industry")
-
-_COMPANY_BG_ALIASES: dict[str, str] = {
-    "国企央企":  "国企/央企",
-    "国有企业":  "国企/央企",
-}
-
-_DIMENSION_ORDER = [d["dimension"] for d in POSITIVE_DIMENSIONS]
 
 
 def _normalize_work_years_str(v: str) -> str:
@@ -269,6 +291,13 @@ def _normalize_positive_tags(tags: list, resume: dict, pos_dims=None) -> list:
             normalized.append(t)
 
         else:
+            # 自定义维度：将 LLM 可能输出的 "value" 字段规范化为 {dim}ValueArray
+            arr_key = f"{dim}ValueArray"
+            if arr_key not in t and "value" in t:
+                raw = t.get("value", [])
+                new_t = {k: v for k, v in t.items() if k != "value"}
+                new_t[arr_key] = raw if isinstance(raw, list) else [raw]
+                t = new_t
             normalized.append(t)
 
     # 合并 companyBg → 单条
@@ -324,6 +353,10 @@ def _normalize_positive_tags(tags: list, resume: dict, pos_dims=None) -> list:
             "source": "ai",
         })
 
+    # 过滤掉配置中已删除或禁用的维度，防止 LLM 幻觉/规则兜底产生的残留标签进入响应
+    enabled_dims = {d["dimension"] for d in pos_dims if d.get("enabled", True)}
+    normalized = [t for t in normalized if t.get("dimension") in enabled_dims]
+
     return normalized
 
 
@@ -364,10 +397,161 @@ def extract_positive_tags_llm(resume: dict, job_info: dict, llm_call_fn) -> dict
 
 # ── 敏感词/风险检测 ───────────────────────────────────────────────
 
+# 4 个硬编码算法维度（专用检测函数）；其他维度走通用关键词执行器
+_HARDCODED_NEG_DIMS = frozenset({"jobstable", "integrity", "location", "matchRisk"})
+
+
+def _collect_all_text(resume: dict) -> str:
+    """收集简历所有文本字段，用于全文关键词匹配。"""
+    c = resume.get("candidate", {})
+    parts = [c.get(f, "") for f in ("address", "nativePlace", "selfEvaluation", "expectedPosition")]
+    for edu in resume.get("educations", []):
+        parts.extend([edu.get("school", ""), edu.get("major", "")])
+    for work in resume.get("works", []):
+        parts.extend([work.get("company", ""), work.get("position", ""), work.get("description", "")])
+    for proj in resume.get("projects", []):
+        parts.append(proj.get("description", ""))
+    return " ".join(p for p in parts if p)
+
+
+def _detect_keyword_rules(resume: dict, dim_cfg: dict, hit_tags: list):
+    """通用关键词匹配规则执行器，适用于 API 新增的自定义负向维度。
+
+    rule 字段：
+      keywords  (list[str])  必填，命中任一关键词即触发
+      searchIn  (list[str])  可选，默认 ["all"]；支持字段路径：
+                             all / works.company / works.description / works.position /
+                             educations.school / educations.major / projects.description /
+                             candidate.address / candidate.nativePlace / candidate.selfEvaluation
+      tagName   (str)        标签展示名，默认等于 ruleKey
+      severity  (str)        low / medium / high，默认 medium
+    """
+    category = dim_cfg.get("displayName", dim_cfg.get("dimension", ""))
+
+    _field_extractors: dict[str, callable] = {
+        "works.company":              lambda r: [w.get("company", "")     for w in r.get("works", [])],
+        "works.description":          lambda r: [w.get("description", "") for w in r.get("works", [])],
+        "works.position":             lambda r: [w.get("position", "")    for w in r.get("works", [])],
+        "educations.school":          lambda r: [e.get("school", "")      for e in r.get("educations", [])],
+        "educations.major":           lambda r: [e.get("major", "")       for e in r.get("educations", [])],
+        "projects.description":       lambda r: [p.get("description", "") for p in r.get("projects", [])],
+        "candidate.address":          lambda r: [r.get("candidate", {}).get("address", "")],
+        "candidate.nativePlace":      lambda r: [r.get("candidate", {}).get("nativePlace", "")],
+        "candidate.selfEvaluation":   lambda r: [r.get("candidate", {}).get("selfEvaluation", "")],
+    }
+
+    for rule_key, rule in dim_cfg.get("rules", {}).items():
+        if not isinstance(rule, dict) or not rule.get("enabled", True):
+            continue
+        keywords = [kw for kw in rule.get("keywords", []) if kw]
+        if not keywords:
+            continue
+
+        search_in = rule.get("searchIn", ["all"])
+        if isinstance(search_in, str):
+            search_in = [search_in]
+
+        if "all" in search_in:
+            full_text = _collect_all_text(resume)
+        else:
+            texts = []
+            for field_key in search_in:
+                extractor = _field_extractors.get(field_key)
+                if extractor:
+                    texts.extend(extractor(resume))
+            full_text = " ".join(t for t in texts if t)
+
+        tag_name = rule.get("tagName", rule_key)
+        severity = rule.get("severity", "medium")
+
+        for kw in keywords:
+            if kw in full_text:
+                idx     = full_text.find(kw)
+                snippet = full_text[max(0, idx - 10): idx + len(kw) + 20].strip()
+                hit_tags.append({
+                    "category":      category,
+                    "tag":           tag_name,
+                    "severity":      severity,
+                    "matchedContent": f"...{snippet}...",
+                })
+                break  # 同一规则匹配一次即可，避免重复计分
+
+
+def _build_negative_prompt(neg_dims_llm: list, resume_json: str) -> str:
+    """按 detectionType='llm' 的负向维度动态拼装 LLM prompt。
+    每条 rule 需提供 description 字段描述语义检测标准；缺省时回退到 tagName。
+    """
+    sections = []
+    for d in neg_dims_llm:
+        if not d.get("enabled", True):
+            continue
+        rules_lines = []
+        for rule_key, rule in d.get("rules", {}).items():
+            if not isinstance(rule, dict) or not rule.get("enabled", True):
+                continue
+            tag_name    = rule.get("tagName", rule_key)
+            severity    = rule.get("severity", "medium")
+            description = rule.get("description", tag_name)
+            rules_lines.append(f"- {tag_name}（{severity}）：{description}")
+        if not rules_lines:
+            continue
+        sections.append(GENERIC_NEG_DIM_PROMPT.format(
+            dimension=d["dimension"],
+            display_name=d.get("displayName", d["dimension"]),
+            rules_text="\n".join(rules_lines),
+        ))
+
+    return NEGATIVE_PROMPT_HEADER.format(
+        resume_json=resume_json,
+        schema_example=json.dumps(NEGATIVE_TAG_SCHEMA, ensure_ascii=False, indent=2),
+    ) + "\n\n".join(sections)
+
+
+@observe()
+def extract_negative_tags_llm(resume: dict, neg_dims_llm: list, llm_call_fn) -> list[dict]:
+    """LLM 层负向标签提取，仅处理 detectionType='llm' 的维度。
+    返回已转换为 hitTags 格式的列表：[{"category": displayName, "hits": [...]}]
+    """
+    prompt = _build_negative_prompt(
+        neg_dims_llm,
+        json.dumps(resume, ensure_ascii=False, indent=2),
+    )
+    # displayName 查找表，用于将 LLM 输出的 dimension 转换为 category（displayName）
+    dim_to_display = {d["dimension"]: d.get("displayName", d["dimension"]) for d in neg_dims_llm}
+
+    try:
+        raw    = llm_call_fn([
+            {"role": "system", "content": TAGGER_SYSTEM},
+            {"role": "user",   "content": prompt},
+        ])
+        result = json_repair.loads(raw)
+        if not isinstance(result, dict):
+            raise ValueError("非 dict 输出")
+
+        hit_groups: list[dict] = []
+        for group in result.get("negativeTags", []):
+            dim  = group.get("dimension", "")
+            # 白名单过滤：LLM 幻觉输出的未知维度直接丢弃
+            if dim not in dim_to_display:
+                continue
+            hits = [h for h in group.get("hits", []) if isinstance(h, dict) and h.get("tag")]
+            if not hits:
+                continue
+            hit_groups.append({"category": dim_to_display[dim], "hits": hits})
+        return hit_groups
+
+    except Exception:
+        logger.warning("LLM 负向打标失败，跳过 llm 类型维度")
+        return []
+
+
 def _neg_cfg_map(neg_dims=None) -> dict[str, dict]:
-    """返回 {displayName: config} 查找表，优先使用运行时配置。"""
+    """返回 {dimension: config} 查找表，优先使用运行时配置。
+    使用 dimension（稳定标识符）而非 displayName（可通过 API 修改），
+    防止改名后检测逻辑静默失效。
+    """
     dims = neg_dims if neg_dims is not None else _tagger_load_cfg()["negativeDimensions"]
-    return {d["displayName"]: d for d in dims}
+    return {d["dimension"]: d for d in dims}
 
 
 def detect_sensitive_tags(resume: dict, job_info: dict) -> dict:
@@ -382,18 +566,18 @@ def detect_sensitive_tags(resume: dict, job_info: dict) -> dict:
     cfg = _neg_cfg_map(_runtime["negativeDimensions"])
 
     # 1. 职业稳定性风险
-    stab = cfg.get("职业稳定性风险", {})
-    if stab.get("enabled", True):
+    stab = cfg.get("jobstable", {})
+    if stab and stab.get("enabled", True):   # stab={} 表示维度已被删除，直接跳过
         _detect_stability(works, hit_tags, stab.get("rules", {}))
 
     # 2. 诚信与合规风险
-    comp = cfg.get("诚信与合规风险", {})
-    if comp.get("enabled", True):
+    comp = cfg.get("integrity", {})
+    if comp and comp.get("enabled", True):
         _detect_timeline_overlap(works, hit_tags, comp.get("rules", {}))
 
-    # 3. 地域相关（自定义敏感词）
-    loc = cfg.get("地域相关", {})
-    if loc.get("enabled", True):
+    # 3. 地域相关（jobSensitiveWords 来自请求，非配置文件关键词）
+    loc = cfg.get("location", {})
+    if loc and loc.get("enabled", True):
         sw_cfg = loc.get("rules", {}).get("sensitive_words", {})
         if sw_cfg.get("enabled", True):
             sensitive_words = _parse_sensitive_words(job_info.get("jobSensitiveWords", ""))
@@ -402,10 +586,18 @@ def detect_sensitive_tags(resume: dict, job_info: dict) -> dict:
                                      sw_cfg.get("severity", "high"))
 
     # 4. 匹配度硬伤
-    match = cfg.get("匹配度硬伤", {})
-    if match.get("enabled", True):
+    match = cfg.get("matchRisk", {})
+    if match and match.get("enabled", True):
         _detect_education_risk(resume.get("educations", []), hit_tags,
                                match.get("rules", {}))
+
+    # 5. API 新增的自定义维度 → 通用关键词规则执行器
+    for dim_cfg in _runtime["negativeDimensions"]:
+        if dim_cfg["dimension"] in _HARDCODED_NEG_DIMS:
+            continue  # 硬编码维度已由专用函数处理
+        if not dim_cfg.get("enabled", True):
+            continue
+        _detect_keyword_rules(resume, dim_cfg, hit_tags)
 
     deduction = sum(_runtime["severityDeduction"].get(t["severity"], -5) for t in hit_tags)
 
@@ -429,6 +621,7 @@ def detect_sensitive_tags(resume: dict, job_info: dict) -> dict:
 
 def _detect_stability(works: list, hit_tags: list, rules: dict):
     """频繁跳槽 / 最近一段偏短 / 空窗期"""
+    # 少于 2 段经历无法计算跳槽频率和空窗期，直接跳过
     if len(works) < 2:
         return
 
@@ -588,9 +781,10 @@ def _detect_education_risk(educations: list, hit_tags: list, rules: dict):
 @observe()
 def run_tagging(resume: dict, job_info: dict, llm_call_fn=None) -> dict:
     """
-    两阶段打标：
+    三阶段打标：
     1. 正向标签提取（LLM 优先，降级规则）
-    2. 敏感词/风险检测（规则层）
+    2. 负向规则检测（4 个硬编码维度 + 自定义关键词维度）
+    3. 负向 LLM 检测（detectionType='llm' 的维度，有 llm_call_fn 时执行）
     返回完整 tagInfo 字段。
     """
     if llm_call_fn:
@@ -599,6 +793,26 @@ def run_tagging(resume: dict, job_info: dict, llm_call_fn=None) -> dict:
         positive_result = extract_positive_tags_rule(resume)
 
     sensitive_result = detect_sensitive_tags(resume, job_info)
+
+    # LLM 负向检测：只对 detectionType='llm' 且 enabled=True 的维度调用
+    if llm_call_fn:
+        cfg          = _tagger_load_cfg()
+        neg_dims_llm = [
+            d for d in cfg["negativeDimensions"]
+            if d.get("detectionType", "rule") == "llm" and d.get("enabled", True)
+        ]
+        if neg_dims_llm:
+            llm_hit_groups = extract_negative_tags_llm(resume, neg_dims_llm, llm_call_fn)
+            if llm_hit_groups:
+                severity_map = cfg.get("severityDeduction", {"low": -5, "medium": -10, "high": -20})
+                sensitive_result["hitTags"].extend(llm_hit_groups)
+                # 重新累加 hitCount / deductionScore
+                for group in llm_hit_groups:
+                    for h in group.get("hits", []):
+                        sensitive_result["hitCount"]       += 1
+                        sensitive_result["deductionScore"] += severity_map.get(
+                            h.get("severity", "medium"), -10
+                        )
 
     return {
         "positiveTags":   positive_result["positiveTags"],

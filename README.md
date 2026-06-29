@@ -88,8 +88,7 @@ Qwen3.5-397B-A17B（内网 vLLM 服务，OpenAI 兼容接口）
 ├── schemas/                 # JSON Schema 与运行时配置
 │   ├── resume_result_template.json        # 输出字段模板
 │   ├── tag_config_runtime.json            # 运行时打标配置（可热更新）
-│   ├── tag_static_data.json               # 静态标签数据
-│   └── AIHR_Resume_Postman_Collection.json  # Postman 集合（可直接导入）
+│   └── tag_static_data.json               # 静态标签数据
 ├── test/                    # 测试工具
 │   ├── test_tagging.py      # 打标功能测试
 │   ├── stress_test_async.py # 并发压力测试
@@ -163,7 +162,9 @@ curl http://localhost:21804/health
 | 08 | POST | `/api/tags/config/positive` | 新增正向维度 🔒 |
 | 09 | PUT  | `/api/tags/config/positive/{dimension}` | 更新正向维度 🔒 |
 | 10 | DELETE | `/api/tags/config/positive/{dimension}` | 删除正向维度 🔒 |
+| **10A** | **POST** | `/api/tags/config/negative` | **新增负向维度（rule/llm 双模式）🔒** |
 | 11 | PUT  | `/api/tags/config/negative/{dimension}` | 更新负向维度 🔒 |
+| **11A** | **DELETE** | `/api/tags/config/negative/{dimension}` | **删除负向维度 🔒** |
 | 12 | POST | `/api/tags/config/negative/{dimension}/rules` | 新增负向规则 🔒 |
 | 13 | PUT  | `/api/tags/config/negative/{dimension}/rules/{ruleKey}` | 更新负向规则 🔒 |
 | 14 | DELETE | `/api/tags/config/negative/{dimension}/rules/{ruleKey}` | 删除负向规则 🔒 |
@@ -648,6 +649,35 @@ DELETE /api/tags/config/positive/{dimension}
 ### 负向维度与规则管理
 
 ```
+# 新增自定义维度（rule 关键词类型）
+POST /api/tags/config/negative
+Body: {
+  "dimension": "keywordRisk", "displayName": "关键词风险",
+  "enabled": true, "detectionType": "rule",
+  "rules": {
+    "dispute_risk": {
+      "tagName": "含劳动纠纷词", "enabled": true,
+      "keywords": ["劳动仲裁", "离职纠纷"],
+      "searchIn": ["works.description", "candidate.selfEvaluation"],
+      "severity": "high"
+    }
+  }
+}
+
+# 新增自定义维度（llm 语义检测类型）
+POST /api/tags/config/negative
+Body: {
+  "dimension": "attitudeRisk", "displayName": "候选人态度风险",
+  "enabled": true, "detectionType": "llm",
+  "rules": {
+    "negative_attitude": {
+      "tagName": "负面态度倾向", "enabled": true,
+      "description": "自我评价中对前东家有抱怨或推卸责任的表述",
+      "severity": "medium"
+    }
+  }
+}
+
 # 禁用整个维度
 PUT /api/tags/config/negative/integrity
 Body: {"enabled": false}
@@ -684,8 +714,6 @@ POST /api/tags/config/reset
 ---
 
 ## Postman 使用指南
-
-> 完整 Postman 集合文件：`schemas/AIHR_Resume_Postman_Collection.json`，直接导入 Postman 即可使用。
 
 ### 集合变量
 
@@ -889,4 +917,4 @@ A: 通过配置接口修改后**立即生效**，无需重启服务（写入 `sc
 A: 调用方传入自己的业务 ID（如 userId、resumeId 等），服务原样存储并在响应中透传返回，方便业务侧数据关联。
 
 **Q: 提交成功但 `/api/tasks` 看不到任务？**  
-A: 任务 TTL=10 分钟，超时自动清除；或检查是否提交到了不同端口的实例。
+A: 任务 TTL=120 分钟，超时自动清除；或检查是否提交到了不同端口的实例。

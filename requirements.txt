@@ -12,4 +12,4 @@ python-multipart>=0.0.9
 coloredlogs>=15.0.1
 watchdog>=4.0.0
 pyyaml>=6.0.2
-langfuse>=2.0.0,<3.0.0
+langfuse>=3.0.0

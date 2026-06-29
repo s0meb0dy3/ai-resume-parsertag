@@ -6,6 +6,13 @@ model 字段决定行为：
   DeepSeek-OCR-JSON → 解析 + 打标；async_mode=true 立即返回 taskId，否则同步等待
 
 批量模式：content 数组含多个文件 item 时自动并发，返回 JSON 数组（每项含 success/result）。
+
+同步批量接口（阻塞等待全部完成）：
+  /api/resume/sync/batch  → 解析 + 打标，返回完整结果列表
+  /api/resume/sync/parse  → 仅解析，结果 resume 字段可直接作为 /api/resume/sync/tag 输入
+  /api/resume/sync/tag    → 仅打标，输入已解析的简历 JSON，无需重新解析 PDF
+
+注：同步接口均使用 SYNC_MODEL_NAME（可配置为较小/较快模型），异步接口使用 ASYNC_MODEL_NAME。
 """
 import asyncio
 import json
@@ -18,7 +25,11 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
-from config import MAX_WORKERS, logger, set_log_context, wrap_for_executor
+from config import (
+    MAX_WORKERS, SYNC_MODEL_NAME, logger, reset_current_model_name, set_current_model_name,
+    set_log_context, wrap_for_executor,
+)
+from api.schemas import SyncBatchRequest, SyncTagRequest
 from utils.file_utils import get_pdf_source_from_content
 from core.parser import _llm_call, _parse_with_logging
 from core.postprocess import _conform_to_template
@@ -26,6 +37,23 @@ from tag.tagger import run_tagging
 from core.tasks import TaskRecord, _STATUS_DESC, _run_parse_and_tag, _task_lock, _task_store, _parse_semaphore, executor
 
 router = APIRouter()
+
+
+# 同步接口使用独立的模型上下文，避免与异步任务共享 ContextVar 导致模型名互相覆盖
+def _parse_with_sync_model(source, filename: str):
+    token = set_current_model_name(SYNC_MODEL_NAME)
+    try:
+        return _parse_with_logging(source, filename)
+    finally:
+        reset_current_model_name(token)
+
+
+def _tag_with_sync_model(resume: dict, job_info: dict):
+    token = set_current_model_name(SYNC_MODEL_NAME)
+    try:
+        return run_tagging(resume, job_info, llm_call_fn=_llm_call)
+    finally:
+        reset_current_model_name(token)
 
 
 # ── 请求体模型（驱动 Swagger 文档）────────────────────────────────
@@ -162,7 +190,8 @@ async def create_chat_completion(request: ChatCompletionRequest):
         contents = [c.model_dump() if hasattr(c, "model_dump") else c for c in contents]
 
     def _is_probe(c) -> bool:
-        # 兼容 OpenAI SDK 的连通性探测请求（空 content 或 "### Task" 前缀的测试消息）
+        # OpenAI SDK 初始化时会发送 "### Task" 前缀的连通性探测消息，无需走解析流程
+        # json_repair.loads 返回 str（而非 dict）说明 content 是纯文本而非 JSON 结构，同样视为探测
         if not c:
             return True
         if isinstance(c, list) and len(c) == 0:
@@ -202,7 +231,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
         t2 = time.time()
         try:
             result = await asyncio.get_running_loop().run_in_executor(
-                executor, wrap_for_executor(_parse_with_logging), source, filename or "unknown.pdf"
+                executor, wrap_for_executor(_parse_with_sync_model), source, filename or "unknown.pdf"
             )
         except Exception as e:
             logger.error(f"PDF 解析失败: {e}")
@@ -226,14 +255,14 @@ async def create_chat_completion(request: ChatCompletionRequest):
             _task_store[task_id] = rec
 
         if request.async_mode:
-            asyncio.create_task(_run_parse_and_tag(task_id, source, filename or "resume.pdf", job_info))
+            asyncio.create_task(_run_parse_and_tag(task_id, source, filename or "resume.pdf", job_info, SYNC_MODEL_NAME))
             generated_text = json.dumps(
                 {"taskId": task_id, "status": 0, "statusDesc": "待处理", "estimatedSeconds": 90},
                 ensure_ascii=False,
             )
             logger.info(f"{model} async_mode=true taskId={task_id}")
         else:
-            await _run_parse_and_tag(task_id, source, filename or "resume.pdf", job_info)
+            await _run_parse_and_tag(task_id, source, filename or "resume.pdf", job_info, SYNC_MODEL_NAME)
             async with _task_lock:
                 rec = _task_store.get(task_id)
             if rec and rec.status == 3:
@@ -246,6 +275,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
     else:
         generated_text = ""
 
+    # 用字符数代替真实 token 数：此接口不经过真正的 tokenizer，调用方通常不依赖 usage 字段
     prompt_tokens = completion_tokens = len(generated_text)
     content_body  = {
         "id": f"ocr-{uuid.uuid4().hex}", "object": "chat.completion",
@@ -263,7 +293,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
 
 
 @router.post("/api/resume/sync/batch")
-async def batch_parse_resumes(request: dict):
+async def batch_parse_resumes(request: SyncBatchRequest):
     """
     同步批量解析+打标，阻塞等待全部完成后返回。
     每条 result 格式与 GET /api/resume/async/result (status=3) 的 data 字段完全一致。
@@ -271,15 +301,9 @@ async def batch_parse_resumes(request: dict):
     支持与 /api/resume/async/batch 相同的请求体字段（jobTitle / requiredSkills / jobDescription / jobSensitiveWords）。
     """
     t0           = time.time()
-    resume_items = request.get("resumes", [])
-    max_conc     = min(int(request.get("max_concurrency", MAX_WORKERS)), 30)
-    job_info     = {k: request.get(k, "") or ""
-                    for k in ("jobTitle", "requiredSkills", "jobDescription", "jobSensitiveWords")}
-
-    if not resume_items:
-        return JSONResponse(status_code=400, content={"error": "resumes 数组不能为空"})
-    if len(resume_items) > 50:
-        return JSONResponse(status_code=400, content={"error": "单次最多处理 50 份简历"})
+    resume_items = request.resumes
+    max_conc     = min(request.max_concurrency or MAX_WORKERS, 30)
+    job_info     = request.to_job_info()
 
     loop = asyncio.get_running_loop()
 
@@ -304,14 +328,14 @@ async def batch_parse_resumes(request: dict):
         prepared.append({"task_id": task_id, "filename": fn or filename,
                          "extra": extra, "source": source, "error": None})
 
-    # 并发执行解析+打标（batch 级 semaphore 叠加在 _parse_semaphore 之上）
+    # 双层限流：sem 控制本次批量请求内的并发数，_parse_semaphore 在全局层面防止线程池积压
     sem = asyncio.Semaphore(max_conc)
 
     async def _run_one(p: dict):
         if p["error"]:
             return
         async with sem:
-            await _run_parse_and_tag(p["task_id"], p["source"], p["filename"], job_info)
+            await _run_parse_and_tag(p["task_id"], p["source"], p["filename"], job_info, SYNC_MODEL_NAME)
 
     await asyncio.gather(*[_run_one(p) for p in prepared])
 
@@ -359,7 +383,7 @@ async def batch_parse_resumes(request: dict):
 
 
 @router.post("/api/resume/sync/parse")
-async def sync_parse_resumes(request: dict):
+async def sync_parse_resumes(request: SyncBatchRequest):
     """
     同步批量解析（仅解析，不打标），阻塞等待全部完成后返回简历结构化 JSON。
     results[].data.resume 为解析后的原始简历 JSON，可直接作为 /api/resume/sync/tag 的输入。
@@ -367,13 +391,8 @@ async def sync_parse_resumes(request: dict):
     请求体字段与 /api/resume/sync/batch 完全一致（resumes 数组，每项含 type / file / text）。
     """
     t0           = time.time()
-    resume_items = request.get("resumes", [])
-    max_conc     = min(int(request.get("max_concurrency", MAX_WORKERS)), 30)
-
-    if not resume_items:
-        return JSONResponse(status_code=400, content={"error": "resumes 数组不能为空"})
-    if len(resume_items) > 50:
-        return JSONResponse(status_code=400, content={"error": "单次最多处理 50 份简历"})
+    resume_items = request.resumes
+    max_conc     = min(request.max_concurrency or MAX_WORKERS, 30)
 
     loop = asyncio.get_running_loop()
 
@@ -406,7 +425,7 @@ async def sync_parse_resumes(request: dict):
                                     business_type="简历解析", filename=p["filename"])
                     p["resume"] = await loop.run_in_executor(
                         executor,
-                        wrap_for_executor(_parse_with_logging),
+                        wrap_for_executor(_parse_with_sync_model),
                         p["source"], p["filename"],
                     )
                     p["parse_time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -453,7 +472,7 @@ async def sync_parse_resumes(request: dict):
 
 
 @router.post("/api/resume/sync/tag")
-async def sync_tag_resumes(request: dict):
+async def sync_tag_resumes(request: SyncTagRequest):
     """
     同步批量打标（仅打标，不解析），阻塞等待全部完成后返回。
     输入中 resumes 数组的每项结构与 /api/resume/sync/parse 响应的 results[].data 字段完全一致：
@@ -463,51 +482,35 @@ async def sync_tag_resumes(request: dict):
     支持 jobTitle / requiredSkills / jobDescription / jobSensitiveWords 岗位信息字段。
     """
     t0           = time.time()
-    resume_items = request.get("resumes", [])
-    max_conc     = min(int(request.get("max_concurrency", MAX_WORKERS)), 30)
-    job_info     = {k: request.get(k, "") or ""
-                    for k in ("jobTitle", "requiredSkills", "jobDescription", "jobSensitiveWords")}
-
-    if not resume_items:
-        return JSONResponse(status_code=400, content={"error": "resumes 数组不能为空"})
-    if len(resume_items) > 50:
-        return JSONResponse(status_code=400, content={"error": "单次最多处理 50 份简历"})
+    resume_items = request.resumes
+    max_conc     = min(request.max_concurrency or MAX_WORKERS, 30)
+    job_info     = request.to_job_info()
 
     loop = asyncio.get_running_loop()
     sem  = asyncio.Semaphore(max_conc)
 
-    async def _tag_one(item: dict) -> dict:
-        filename          = item.get("filename", "resume.pdf")
-        extra             = item.get("extra")
-        resume_parse_time = item.get("resumeParseFinishTime", "")
-        resume            = item.get("resume")
+    async def _tag_one(item) -> dict:
+        filename          = item.filename
+        extra             = item.extra
+        resume_parse_time = item.resumeParseFinishTime
+        resume            = item.resume
         task_id           = str(uuid.uuid4())
-
-        if not isinstance(resume, dict):
-            return {
-                "code": 1,
-                "msg":  "resume 字段缺失或格式错误",
-                "data": {
-                    "taskId": task_id, "status": 4, "statusDesc": "任务失败",
-                    "elapsedSeconds": 0, "estimatedSeconds": 90,
-                    "extra": extra, "errorMsg": "resume 字段缺失或格式错误",
-                },
-            }
 
         async with sem:
             tag_start = time.time()
             try:
                 set_log_context(request_id=task_id[:8],
                                 business_type="标签打标", filename=filename)
+                # 用局部变量捕获当前迭代的 resume/job_info，避免 asyncio.gather 并发时 lambda 闭包共享外层变量
                 _resume   = resume
                 _job_info = job_info
                 tag_info  = await loop.run_in_executor(
                     executor,
-                    wrap_for_executor(lambda: run_tagging(_resume, _job_info, llm_call_fn=_llm_call)),
+                    wrap_for_executor(lambda: _tag_with_sync_model(_resume, _job_info)),
                 )
                 elapsed = round(time.time() - tag_start, 1)
                 result  = _conform_to_template(task_id, resume, tag_info, resume_parse_time)
-                return {
+                item_resp = {
                     "code": 0,
                     "msg":  "success",
                     "data": {
@@ -520,6 +523,10 @@ async def sync_tag_resumes(request: dict):
                         "result":           result,
                     },
                 }
+                logger.info(f"[sync/tag] 打标完成 file={filename} taskId={task_id} 耗时={elapsed}s")
+                for line in json.dumps(item_resp, ensure_ascii=False, indent=2).splitlines():
+                    logger.info(line)
+                return item_resp
             except Exception as e:
                 logger.error(f"[{task_id}] 打标失败: {e}")
                 return {

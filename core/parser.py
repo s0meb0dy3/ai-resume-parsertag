@@ -1,5 +1,5 @@
 """
-PDF 简历解析核心模块。
+简历解析核心模块。
 
 职责：
   - 维护全局 OpenAI 兼容客户端（单例）
@@ -23,13 +23,15 @@ from datetime import datetime
 from pathlib import Path
 
 import json_repair
-from openai import OpenAI
+from openai import OpenAI, APIStatusError, APIConnectionError, APITimeoutError
 
 from logger.langfuse_client import observe
 from config import (
     MODEL_SERVICE_URL, API_KEY, MODEL_NAME, TEMPERATURE, MAX_TOKENS,
-    API_TIMEOUT, MAX_RETRIES, MAX_WORKERS, PDF_MAX_PAGES_ONCE, BATCH_SIZE,
-    UPLOAD_DIR, RESULT_DIR, _THINKING_DISABLE_PARAMS,
+    API_TIMEOUT, MAX_RETRIES, MAX_WORKERS, PDF_MAX_PAGES_ONCE,
+    UPLOAD_DIR, RESULT_DIR, FALLBACK_MODELS,
+    get_current_model_name, get_thinking_disable_params,
+    reset_current_model_name, set_current_model_name,
 )
 from logger.logger_manager import logger
 from core.prompts import PROMPT_HR, BATCH_SYSTEM
@@ -46,36 +48,96 @@ client = OpenAI(
     max_retries=MAX_RETRIES,
 )
 
-# 由 config 根据 MODEL_NAME 自动选择（Qwen / Kimi / DeepSeek 参数名不同）
-_DISABLE_THINKING = _THINKING_DISABLE_PARAMS
+# 默认模型保留为兜底，具体请求可通过 config 的模型上下文覆盖。
+
+
+def _llm_try_model(messages: list, model_name: str) -> str:
+    """
+    单模型调用，含 thinking block 自动重试。
+    成功返回文本；不可重试的错误直接 raise；可回退的错误也 raise（由调用方决定是否换模型）。
+    """
+    kwargs = dict(
+        model=model_name,
+        messages=messages,
+        temperature=TEMPERATURE,
+        max_tokens=MAX_TOKENS,
+        extra_body=get_thinking_disable_params(model_name),
+    )
+    try:
+        resp = client.chat.completions.create(**kwargs)
+    except APITimeoutError:
+        # 超时是可回退错误，直接向上传递让 _llm_call 决定是否换模型
+        raise
+    except APIConnectionError as e:
+        # 服务器整体不通（非超时），换模型名无意义，直接抛出
+        logger.error(f"[LLM] model={model_name} 无法连接 {MODEL_SERVICE_URL}: {e}")
+        raise
+    except APIStatusError as e:
+        if e.status_code in (401, 403):
+            # 鉴权失败，换模型无效，直接抛出
+            hint = "认证失败，请检查 API_KEY 配置" if e.status_code == 401 else "无权限，请检查 API_KEY 或账户权限"
+            logger.error(f"[LLM] model={model_name} {hint}: {e.message}")
+            raise
+        # 其他 HTTP 错误（404/429/500/502/503）允许回退
+        raise
+    except Exception as e:
+        err = str(e)
+        if "thinking block" in err or "Invalid signature" in err:
+            logger.warning(f"[LLM] model={model_name} thinking block 错误，去掉 thinking 参数重试")
+            kwargs["extra_body"] = {}
+            resp = client.chat.completions.create(**kwargs)
+        else:
+            raise
+    usage = resp.usage
+    if usage:
+        logger.info(
+            f"[LLM] model={model_name} "
+            f"prompt={usage.prompt_tokens} completion={usage.completion_tokens} total={usage.total_tokens}"
+        )
+    return resp.choices[0].message.content
 
 
 @observe()
 def _llm_call(messages: list) -> str:
     """
-    统一 LLM 调用入口。
+    统一 LLM 调用入口，支持模型回退链。
 
-    thinking block 签名校验失败时自动去掉 extra_body 重试一次，
-    兼容部分服务端对 chat_template_kwargs 校验不一致的情况。
+    主模型（当前 ContextVar）失败时依次尝试 FALLBACK_MODELS；
+    服务器整体不通（APIConnectionError）或鉴权失败（401/403）时不回退。
     """
-    kwargs = dict(
-        model=MODEL_NAME,
-        messages=messages,
-        temperature=TEMPERATURE,
-        max_tokens=MAX_TOKENS,
-        extra_body=_DISABLE_THINKING,
-    )
-    try:
-        resp = client.chat.completions.create(**kwargs)
-    except Exception as e:
-        err = str(e)
-        if "thinking block" in err or "Invalid signature" in err:
-            logger.warning(f"thinking block 错误，去掉 thinking 参数重试: {e}")
-            kwargs["extra_body"] = {}
-            resp = client.chat.completions.create(**kwargs)
+    primary    = get_current_model_name()
+    all_models = [primary] + FALLBACK_MODELS
+    last_error: Exception | None = None
+
+    for i, model_name in enumerate(all_models):
+        if i == 0:
+            logger.info(f"[LLM] model={model_name} max_tokens={MAX_TOKENS}")
         else:
-            raise
-    return resp.choices[0].message.content
+            logger.warning(f"[LLM] 回退到备用模型 [{i}/{len(FALLBACK_MODELS)}]: {model_name}")
+        _has_next = i < len(all_models) - 1
+        _next_tip = "尝试下一个备用模型" if _has_next else "已无可用模型"
+        try:
+            return _llm_try_model(messages, model_name)
+        except APITimeoutError as e:
+            # 必须在 APIConnectionError 之前捕获（子类）
+            logger.warning(f"[LLM] model={model_name} 超时 (timeout={API_TIMEOUT}s)，{_next_tip}")
+            last_error = e
+        except APIConnectionError:
+            raise  # 服务器整体不通，终止回退链
+        except APIStatusError as e:
+            if e.status_code in (401, 403):
+                raise  # 鉴权失败，终止回退链
+            hint = {404: "模型不存在", 429: "频率超限", 500: "内部错误", 502: "网关错误", 503: "服务不可用"}.get(
+                e.status_code, f"HTTP {e.status_code}"
+            )
+            logger.warning(f"[LLM] model={model_name} {hint}，{_next_tip}")
+            last_error = e
+        except Exception as e:
+            logger.warning(f"[LLM] model={model_name} 异常: {e}，{_next_tip}")
+            last_error = e
+
+    logger.error(f"[LLM] 所有模型均不可用 {all_models}，最后错误: {last_error}")
+    raise last_error
 
 
 # ── 解析核心 ──────────────────────────────────────────────────────
@@ -103,8 +165,15 @@ def run(source, verbose: bool = False) -> dict:
                 content.append({"type": "text", "text": f"【第 {i+1}/{total_pages} 页】"})
             content.append({"type": "image_url", "image_url": {"url": pil_to_base64(img), "detail": "high"}})
         content.append({"type": "text", "text": "请将以上简历内容严格按指定JSON格式输出，直接输出JSON。"})
-        raw    = _llm_call([{"role": "system", "content": PROMPT_HR}, {"role": "user", "content": content}])
-        result = _post_process(json_repair.loads(raw))
+        raw = _llm_call([{"role": "system", "content": PROMPT_HR}, {"role": "user", "content": content}])
+        if not raw or not raw.strip():
+            logger.error(f"[解析失败] 模型返回空内容，pages={total_pages}，请检查模型服务或 prompt 配置")
+            raise ValueError("LLM 返回空响应")
+        parsed = json_repair.loads(raw)
+        if not parsed:
+            logger.error(f"[解析失败] JSON 修复后仍为空，原始输出片段: {raw[:200]!r}")
+            raise ValueError("JSON 解析结果为空")
+        result = _post_process(parsed)
 
     else:
         batch_sz = smart_batch_size(total_pages)
@@ -112,20 +181,31 @@ def run(source, verbose: bool = False) -> dict:
         if verbose:
             logger.debug(f"{total_pages}页 → {len(batches)}批（每批{batch_sz}页）")
 
+        model_name = get_current_model_name()
+
         def _infer_batch(batch: list) -> dict:
-            """将单批次页面图像发送给 LLM，返回该批次的解析结果；失败时返回 {}。"""
             content = []
             for page_idx, img in batch:
                 content.append({"type": "text", "text": f"【第 {page_idx+1}/{total_pages} 页】"})
                 content.append({"type": "image_url", "image_url": {"url": pil_to_base64(img), "detail": "high"}})
             content.append({"type": "text", "text": "请按指定格式提取以上页面的简历信息，直接输出JSON。"})
+            # ContextVar 是线程局部的；线程池中每个线程必须独立设置当前模型名，不能依赖外层协程的值
+            token = set_current_model_name(model_name)
             try:
                 raw = _llm_call([{"role": "system", "content": BATCH_SYSTEM}, {"role": "user", "content": content}])
-                return json_repair.loads(raw) or {}
+                if not raw or not raw.strip():
+                    logger.warning(f"[解析失败] 分批推理返回空内容，页码={[idx+1 for idx, _ in batch]}")
+                    return {}
+                parsed = json_repair.loads(raw)
+                if not parsed:
+                    logger.warning(f"[解析失败] 分批 JSON 解析为空，页码={[idx+1 for idx, _ in batch]}，原始片段: {raw[:200]!r}")
+                    return {}
+                return parsed
             except Exception as e:
-                if verbose:
-                    logger.warning(f"批次推理失败: {e}")
+                logger.error(f"[解析失败] 分批推理异常，页码={[idx+1 for idx, _ in batch]}: {e}")
                 return {}
+            finally:
+                reset_current_model_name(token)
 
         workers = min(MAX_WORKERS, len(batches))
         with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -134,9 +214,8 @@ def run(source, verbose: bool = False) -> dict:
         result = _post_process(_merge_results(results))
 
     result, report = _validate_schema(result)
-    if verbose and report["fixes"]:
-        for fix in report["fixes"]:
-            logger.debug(f"校验修正: {fix}")
+    if not result.get("candidate", {}).get("name"):
+        logger.warning(f"[解析结果] 候选人姓名为空，可能解析质量较低，建议人工复核")
 
     return result
 
@@ -148,45 +227,13 @@ def _log_result(result: dict, filename: str, elapsed: float):
     edus  = result.get("educations", [])
     works = result.get("works", [])
     projs = result.get("projects", [])
-    gender_map = {1: "男", 2: "女"}
-    SEP = "─" * 60
 
-    logger.info(f"┌{SEP}")
-    logger.info(f"│ 解析结果  文件: {filename}  耗时: {elapsed:.2f}s")
-    logger.info(f"├{'─'*20} 基本信息 {'─'*20}")
-    logger.info(f"│  姓名: {c.get('name','')}  性别: {gender_map.get(c.get('gender'), '-')}  "
-                f"年龄: {c.get('age') or '-'}  电话: {c.get('phone','')}")
-    logger.info(f"│  邮箱: {c.get('email','')}  地址: {c.get('address','')}  籍贯: {c.get('nativePlace','')}")
-    logger.info(f"│  期望薪资: {c.get('expectedSalary','')}  应聘职位: {c.get('expectedPosition','')}")
-    if c.get("selfEvaluation"):
-        logger.info(f"│  自评: {c['selfEvaluation']}")
-
-    logger.info(f"├{'─'*20} 教育经历({len(edus)}) {'─'*18}")
-    for e in edus:
-        logger.info(f"│  {e.get('school','')}  {e.get('major','')}  "
-                    f"{e.get('education','')} / {e.get('degree','')}  "
-                    f"{e.get('startDate','')} ~ {e.get('endDate','')}")
-
-    logger.info(f"├{'─'*20} 工作经历({len(works)}) {'─'*18}")
-    for w in works:
-        logger.info(f"│  [{w.get('position','')}]  {w.get('company','')}  "
-                    f"{w.get('startDate','')} ~ {w.get('endDate','')}")
-        if w.get("description"):
-            for line in w["description"].splitlines():
-                logger.info(f"│    {line}")
-
-    logger.info(f"├{'─'*20} 项目经历({len(projs)}) {'─'*18}")
-    for p in projs:
-        logger.info(f"│  [{p.get('role','')}]  {p.get('projectName','')}  "
-                    f"{p.get('company','')}  {p.get('startDate','')} ~ {p.get('endDate','')}")
-        if p.get("description"):
-            for line in p["description"].splitlines():
-                logger.info(f"│    {line}")
-
-    logger.debug(f"├{'─'*20} 完整简历 JSON {'─'*17}")
+    logger.info(
+        f"[解析完成] {filename} | 耗时={elapsed:.2f}s | "
+        f"姓名={c.get('name', '-')} 教育={len(edus)}条 工作={len(works)}条 项目={len(projs)}条"
+    )
     for line in json.dumps(result, ensure_ascii=False, indent=2).splitlines():
-        logger.debug(f"│  {line}")
-    logger.debug(f"└{SEP}")
+        logger.info(line)
 
 
 def _parse_with_logging(source, filename: str = "unknown.pdf") -> dict:

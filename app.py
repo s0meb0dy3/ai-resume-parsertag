@@ -28,8 +28,8 @@ from datetime import datetime
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from config import get_logger_manager
-from logger.logger_manager import _thread_local
+from config import get_logger_manager, MODEL_NAME, ASYNC_MODEL_NAME, SYNC_MODEL_NAME, MODEL_SERVICE_URL, MAX_TOKENS, FALLBACK_MODELS
+from logger.logger_manager import _thread_local, logger
 from core.parser import _cleanup_uploads
 from core.tasks import _periodic_cleanup, executor
 
@@ -43,10 +43,16 @@ from api.routes_algorithm import router as algorithm_router
 async def lifespan(app: FastAPI):
     lm = get_logger_manager()
     lm.start_config_watcher()
+    fallback_str = " → ".join(FALLBACK_MODELS) if FALLBACK_MODELS else "无"
+    logger.info(
+        f"[模型配置] 默认={MODEL_NAME} | 异步={ASYNC_MODEL_NAME} | 同步={SYNC_MODEL_NAME} | "
+        f"备用={fallback_str} | MAX_TOKENS={MAX_TOKENS} | LLM={MODEL_SERVICE_URL}"
+    )
     _cleanup_uploads()
     cleanup_task = asyncio.create_task(_periodic_cleanup())
     yield
     cleanup_task.cancel()
+    # wait=False：LLM 调用可能耗时数分钟，等待会阻塞 lifespan 关闭；K8s 有 terminationGracePeriodSeconds 兜底
     executor.shutdown(wait=False)
     lm.stop_config_watcher()
     lm.stop_queue_listener()

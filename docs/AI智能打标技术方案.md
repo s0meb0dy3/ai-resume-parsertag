@@ -1,7 +1,7 @@
 # AI 简历解析 + 智能打标 技术方案
 
-> 版本：v3.3
-> 日期：2026-05-27
+> 版本：v3.4
+> 日期：2026-06-25
 > 作者：AIHR 技术团队
 
 ---
@@ -30,7 +30,7 @@
 | 属性 | 说明 |
 |------|------|
 | **服务属性** | 纯无状态中台服务，零数据库、零本地持久化 |
-| **核心能力** | 简历结构化解析 + 正向 5 维度 AI 打标 + 负面/风险检测 |
+| **核心能力** | 简历结构化解析 + 正向维度 AI 打标（动态可扩展）+ 负面/风险检测（规则+LLM 双模式）|
 | **对接模式** | 调用方上传简历文件 → 服务异步处理 → 调用方轮询结果 → 调用方自行存储 |
 | **服务架构** | Python FastAPI 单服务，asyncio 事件循环 + ThreadPoolExecutor 线程池 |
 | **输出标准** | 统一结构化 JSON（v3.1），简历数据 + 正向标签 + 负面标签平铺返回 |
@@ -52,10 +52,11 @@
 
 ### 2.1 总览
 
-- 共 **5 个固定维度**（`rankLevel` 维度已废弃），全部由 AI 自动提取
+- 共 **5 个内置维度**（`rankLevel` 维度已废弃），可通过配置 API 动态新增自定义维度
 - **一个维度可输出多个标签**（education 输出所有适用层级，companyBg/skills/industry 可多条）
 - **置信度**：推断型维度（companyBg、skills、industry）携带；确定性维度（education、workYears）不输出 confidence
 - LLM 提取失败时自动降级到规则层（院校名单 + 大厂名单 + 行业词典匹配）
+- **Prompt 动态生成**：每次打标前按运行时配置动态组装 LLM prompt，新增/删除/禁用维度后下一次打标立即生效
 
 ### 2.2 五大维度详细规范
 
@@ -322,6 +323,20 @@ SEVERITY_DEDUCTION = {"low": -5, "medium": -10, "high": -20}
 | `medium` | -10 | 黄色警告，建议面试核实 |
 | `high` | -20 | 红色风险，建议 HR 人工审核 |
 
+### 3.4 负向维度检测模式（detectionType）
+
+每个负向维度有两种检测模式，通过配置 API 新增维度时指定：
+
+| detectionType | 适用场景 | 配置要求 |
+|:---:|---|---|
+| `rule`（默认） | 关键词匹配、阈值判断 | 规则内提供 `keywords` + 可选 `searchIn` 字段 |
+| `llm` | 语义理解、主观判断 | 规则内提供 `description` 描述检测标准 |
+
+4 个内置维度（`jobstable` / `integrity` / `location` / `matchRisk`）固定使用专用算法函数，不走 `detectionType` 路由。  
+通过 `POST /api/tags/config/negative` 新增的自定义维度：
+- `detectionType: "rule"` → 通用关键词规则执行器，支持 9 个简历字段路径的精准搜索
+- `detectionType: "llm"` → 单独 LLM 调用，将规则 `description` 编译为 prompt 传入大模型
+
 ---
 
 ## 4. 整体架构设计
@@ -345,7 +360,7 @@ AIHR Python 服务（FastAPI v3.1.0，端口 21804）
     │
     ├─ ThreadPoolExecutor（max_workers=24）← 隔离阻塞 IO
     │       ├─ PDF → fitz 渲染图像
-    │       ├─ Qwen3.5-397B-A17B LLM 调用（OCR 解析 + 正向打标）
+    │       ├─ 按接口选择模型的 LLM 调用（异步 Qwen3.5-397B-A17B / 同步 Qwen3.6-35B-A3B）
     │       └─ 规则层计算（敏感词检测）
     │
     ├─ 内存任务缓存（asyncio.Lock + dict，TTL 10min）
@@ -368,7 +383,7 @@ AIHR Python 服务（FastAPI v3.1.0，端口 21804）
       │  run_in_executor → 线程池                                   │
       │  1. PDF → fitz 逐页渲染为 PNG（DPI=144）                     │
       │  2. ≤8页：一次调用 LLM；>8页：分批并发 + 结果合并             │
-      │  3. Qwen3.5-397B-A17B 多模态 LLM → 结构化 JSON              │
+      │  3. ASYNC_MODEL_NAME=Qwen3.5-397B-A17B 多模态 LLM → 结构化 JSON │
       │  4. json_repair 解析 + _validate_schema 字段校验             │
       │  输出：candidate / educations / works / projects            │
       └───────────────────────────────────── 耗时 20~40s ───────────┘
@@ -377,7 +392,7 @@ AIHR Python 服务（FastAPI v3.1.0，端口 21804）
        │  run_in_executor → 线程池（串行，依赖阶段一结果）             │
        │  ① LLM 正向标签提取（耗时 5~20s）                            │
        │     - 结构化简历 + 岗位信息注入 Prompt                       │
-       │     - 调用 Qwen3.5 → 5 维度 positiveTags（{dim}ValueArray） │
+       │     - 调用 ASYNC_MODEL_NAME → 5 维度 positiveTags（{dim}ValueArray） │
        │     - LLM 失败 → 自动降级规则层                              │
        │  ② 规则层负面检测（耗时 < 1s）                               │
        │     - 稳定性：频繁跳槽 / 任职偏短 / 空窗期                    │
@@ -836,13 +851,13 @@ class TaskRecord:
 
 ### 5.3 内存缓存规格
 
-| 属性 | 说明 |
-|------|------|
-| 容器 | `asyncio.Lock + dict`（协程安全） |
-| Key | UUID taskId |
-| Value | TaskRecord（含完整 result） |
-| TTL | 10 分钟（每 60s 定时清理过期记录） |
-| 预警阈值 | 2000 条（超出说明轮询不及时，需排查） |
+| 属性    | 说明                          |
+| ----- | --------------------------- |
+| 容器    | `asyncio.Lock + dict`（协程安全） |
+| Key   | UUID taskId                 |
+| Value | TaskRecord（含完整 result）      |
+| TTL   | 10 分钟（每 60s 定时清理过期记录）       |
+| 预警阈值  | 2000 条（超出说明轮询不及时，需排查）       |
 
 ### 5.4 文件输入支持
 
@@ -883,7 +898,7 @@ POST /api/resume/async/parse
     │  校验文件格式 / 大小 / 幂等 requestId
     │  生成 task_id，写入 _task_store[task_id] = TaskRecord(status=0)
     └─ asyncio.create_task(
-         tasks.py  _run_parse_and_tag(task_id, file_bytes, filename, job_info)
+         tasks.py  _run_parse_and_tag(task_id, file_bytes, filename, job_info, ASYNC_MODEL_NAME)
        )
        ├─ [阶段一] status → 1
        │   loop.run_in_executor(executor,
@@ -896,7 +911,7 @@ POST /api/resume/async/parse
        │         ┌─ [≤8页] 一次调用 ──────────────────────────────────┐
        │         │  parser.py  _llm_call(messages)                    │
        │         │    openai.OpenAI.chat.completions.create()         │
-       │         │    → Qwen3.5-397B-A17B（多模态，images + prompt）  │
+       │         │    → ASYNC_MODEL_NAME=Qwen3.5-397B-A17B（多模态，images + prompt）│
        │         └───────────────────────────────────────────────────┘
        │         ┌─ [>8页] 分批并发 ──────────────────────────────────┐
        │         │  pdf_utils.py  pdf_to_batches(source, batch_size)  │
@@ -990,15 +1005,15 @@ POST /v1/chat/completions  (model=DeepSeek-OCR-JSON 或 AIHR-Resume)
       ├─ type=file   → 直接使用本地路径
       └─ type=base64 → base64.b64decode()
     ─ async_mode=false（同步，默认） ────────────────────────────────────
-    await tasks.py  _run_parse_and_tag(...)       ← 等待完整流水线
+    await tasks.py  _run_parse_and_tag(..., SYNC_MODEL_NAME)  ← 等待完整流水线
     ─ async_mode=true（异步） ──────────────────────────────────────────
-    asyncio.create_task(_run_parse_and_tag(...))  ← 立即返回 taskId
+    asyncio.create_task(_run_parse_and_tag(..., SYNC_MODEL_NAME))  ← 立即返回 taskId
 
 POST /v1/chat/completions  (model=DeepSeek-OCR)
   api/routes_openai.py  create_chat_completion(request)
     file_utils.py  get_pdf_source_from_content(contents)
     loop.run_in_executor(executor,
-      parser.py  _parse_with_logging(source, filename)  ← 仅解析，不打标
+      parser.py  _parse_with_sync_model(source, filename)  ← 仅解析，不打标
     )
     返回结构化简历 JSON 字符串（OpenAI message.content）
 ```
@@ -1067,7 +1082,7 @@ POST /api/resume/async/batch
   │     │
   │     ├─ [提交后台流水线（非阻塞）]
   │     │   asyncio.create_task(
-  │     │     tasks.py  _run_parse_and_tag(task_id, source, fn or filename, job_info)
+  │     │     tasks.py  _run_parse_and_tag(task_id, source, fn or filename, job_info, ASYNC_MODEL_NAME)
   │     │   )                                         ← 立即返回，不等待完成
   │     │   注：source 此时为 uploads/ 目录下的本地路径
   │     │
@@ -1124,7 +1139,7 @@ POST /api/resume/async/batch/multiform
   │     async with _task_lock:
   │       _task_store[task_id] = TaskRecord(task_id=task_id)
   │     asyncio.create_task(
-  │       tasks.py  _run_parse_and_tag(task_id, file_bytes, filename, job_info)
+  │       tasks.py  _run_parse_and_tag(task_id, file_bytes, filename, job_info, ASYNC_MODEL_NAME)
   │     )                                            ← source = bytes（不落盘）
   │     tasks.append({"code":0, "taskId":task_id, ...})
   │
@@ -1143,7 +1158,7 @@ POST /api/resume/async/batch/multiform
         async with _task_lock:
           _task_store[task_id] = rec
         asyncio.create_task(
-          tasks.py  _run_parse_and_tag(task_id, source, fn or filename, job_info)
+          tasks.py  _run_parse_and_tag(task_id, source, fn or filename, job_info, ASYNC_MODEL_NAME)
         )
         tasks.append({"code":0, "taskId":task_id, "extra":extra, ...})
 ```
@@ -1261,14 +1276,21 @@ tasks.py  _cleanup_task_store()
   [删除 created_at < cutoff 的记录]
 
 parser.py  _llm_call(messages)
+  model_name = get_current_model_name()  ← 请求/任务级模型上下文
   client.chat.completions.create(
-    model=MODEL_NAME,
+    model=model_name,
     temperature=TEMPERATURE,             ← 0.01（低温保稳定性）
     max_tokens=MAX_TOKENS,               ← 4096
-    extra_body=_DISABLE_THINKING,        ← 禁用 thinking block
+    extra_body=get_thinking_disable_params(model_name), ← 禁用 thinking block
   )
   [异常处理] "thinking block" / "Invalid signature"
     → 去掉 extra_body 重试一次
+
+config.py  模型路由
+  MODEL_NAME       = Qwen3.6-35B-A3B       ← 默认兜底
+  ASYNC_MODEL_NAME = Qwen3.5-397B-A17B     ← /api/resume/async/*
+  SYNC_MODEL_NAME  = Qwen3.6-35B-A3B       ← /api/resume/sync/* 与 /v1/chat/completions
+  ContextVar current_model_name            ← 传递到 _llm_call
 ```
 
 ---
@@ -1501,6 +1523,7 @@ GET /api/tasks?status=3  ← 只返回"已完成"任务
 | `POST` | `/api/tags/config/positive` | 新增正向维度 |
 | `PUT` | `/api/tags/config/positive/{dimension}` | 更新正向维度（displayName / enabled / allowedValues） |
 | `DELETE` | `/api/tags/config/positive/{dimension}` | 删除正向维度 |
+| `POST` | `/api/tags/config/negative` | 新增负向维度（rule/llm 两种检测类型） |
 | `PUT` | `/api/tags/config/negative/{dimension}` | 更新负向维度（displayName / enabled） |
 | `POST` | `/api/tags/config/negative/{dimension}/rules` | 向负向维度新增规则 |
 | `PUT` | `/api/tags/config/negative/{dimension}/rules/{ruleKey}` | 更新负向规则参数 |
@@ -2243,6 +2266,15 @@ class ResumeResult(BaseModel):
 - `_tagger_load_cfg()`（`tag/tagger.py`）：mtime 缓存，仅当 `runtime.json` 文件变更时重新读取，避免每次打标重复 IO
 - `_conform_to_template()`（`postprocess.py`）：每次调用时动态调用 `load_tag_cfg()`，立即感知最新配置；`displayName` 查找表（`_build_display_maps`）无需重启即可生效
 
+**各类配置变更的生效范围**：
+
+| 配置变更 | 生效时机 | 说明 |
+|---------|---------|------|
+| 正向维度 `allowedValues` 修改 | 下一次打标立即生效 | LLM prompt 按运行时配置动态组装，修改后自动包含新枚举值 |
+| 新增正向维度 | 下一次打标立即生效 | 新维度自动注入 prompt 指令，LLM 输出中包含该维度标签 |
+| 新增负向维度（`detectionType: "rule"`） | 下一次打标立即生效 | 通用关键词规则执行器在 `detect_sensitive_tags` 中遍历所有启用维度 |
+| 新增负向维度（`detectionType: "llm"`） | 下一次打标立即生效 | 为该维度单独发起 LLM 调用，`description` 字段编译为 prompt |
+
 ### 10.2 tag_static_data.json 结构
 
 ```
@@ -2455,9 +2487,9 @@ else:
 
 | 阶段 | 耗时 | 备注 |
 |------|------|------|
-| 简历解析（≤8页） | 20~40s | PDF 渲染 + Qwen3.5 多模态单次调用 |
-| 简历解析（>8页） | 30~60s | 分批并发（每批 1~2 页），ThreadPoolExecutor 并发合并 |
-| 正向打标（LLM） | 5~20s | 纯文本，Qwen3.5 |
+| 简历解析（≤8页） | 20~40s | PDF 渲染 + 当前接口绑定模型的多模态单次调用；异步默认 Qwen3.5-397B-A17B，同步默认 Qwen3.6-35B-A3B |
+| 简历解析（>8页） | 30~60s | 分批并发（每批 1~2 页），ThreadPoolExecutor 并发合并，批次内部显式保留当前模型上下文 |
+| 正向打标（LLM） | 5~20s | 纯文本，沿用当前请求/任务绑定模型 |
 | 负面检测（规则） | < 1s | 纯 Python 规则计算 |
 | **全流程（异步）** | **45~90s** | 接口 < 100ms 返回，后台流水线完成后写入缓存 |
 | 并发能力 | 24 并发线程 | 取决于 `MAX_WORKERS` 环境变量和模型侧吞吐 |
@@ -2480,7 +2512,9 @@ else:
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `MODEL_SERVICE_URL` | —（**必填**） | LLM 服务地址（OpenAI 兼容，无默认值，启动时强制校验） |
-| `MODEL_NAME` | `Qwen3.5-397B-A17B` | 模型名称 |
+| `MODEL_NAME` | `Qwen3.6-35B-A3B` | 默认兜底模型；未设置接口专用模型时使用 |
+| `ASYNC_MODEL_NAME` | `Qwen3.5-397B-A17B` | 异步接口 `/api/resume/async/*` 使用的解析/打标模型 |
+| `SYNC_MODEL_NAME` | `Qwen3.6-35B-A3B` | 同步接口 `/api/resume/sync/*` 与 OpenAI 兼容层 `/v1/chat/completions` 使用的解析/打标模型 |
 | `MAX_WORKERS` | `24` | 线程池大小 |
 | `API_TIMEOUT` | `300` | LLM 调用超时（秒） |
 | `MAX_RETRIES` | `2` | LLM 失败重试次数 |

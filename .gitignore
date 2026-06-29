@@ -18,6 +18,9 @@ logs/
 uploads/
 results/
 
+# 本地素材（不入库）
+localmaterial/
+
 # 测试 PDF 文件
 test_full/
 *.pdf
@@ -30,3 +33,6 @@ test_full/
 .idea/
 .vscode/
 *.swp
+
+# Claude Code（本地配置和临时 worktree，不入库）
+.claude/

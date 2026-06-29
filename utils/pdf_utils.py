@@ -16,7 +16,7 @@ import base64
 import fitz
 from PIL import Image
 
-from config import PDF_DPI, BATCH_SIZE
+from config import PDF_DPI
 
 
 def pil_to_base64(img: Image.Image) -> str:
@@ -37,9 +37,12 @@ def _render_pages(source) -> list[tuple[int, Image.Image]]:
     """公共渲染基函数：PDF → [(page_idx, PIL Image)]，pdf_to_images / pdf_to_batches 共用。"""
     doc = _open_pdf(source)
     try:
+        # PDF 坐标系以 72 DPI（1点 = 1/72英寸）为基准；zoom 换算为目标分辨率
         zoom = PDF_DPI / 72.0
         mat  = fitz.Matrix(zoom, zoom)
         return [
+            # alpha=False：跳过 Alpha 通道，节省约 25% 内存且 LLM 不需要透明度信息
+            # .copy()：doc.close() 会释放 pixmap 内存，PIL Image 必须持有独立副本才能在 finally 后继续使用
             (i, Image.open(io.BytesIO(doc[i].get_pixmap(matrix=mat, alpha=False).tobytes("png"))).copy())
             for i in range(doc.page_count)
         ]
@@ -60,7 +63,7 @@ def pdf_to_images(source) -> list[Image.Image]:
     return [img for _, img in _render_pages(source)]
 
 
-def pdf_to_batches(source, batch_size: int = BATCH_SIZE) -> list[list[tuple[int, Image.Image]]]:
+def pdf_to_batches(source, batch_size: int = 1) -> list[list[tuple[int, Image.Image]]]:
     pages = _render_pages(source)
     return [pages[i:i + batch_size] for i in range(0, len(pages), batch_size)]
 

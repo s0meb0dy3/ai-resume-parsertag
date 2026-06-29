@@ -4,6 +4,8 @@
   /api/resume/async/parse          - 单文件上传，立即返回 taskId
   /api/resume/async/result         - 轮询任务状态与结果
   /api/resume/async/batch          - 批量 URL 提交，立即返回 taskId 列表
+  /api/resume/async/batch/parse    - 批量 URL 提交，仅异步解析，立即返回 taskId 列表
+  /api/resume/async/batch/tag      - 批量提交解析结果，仅异步打标，立即返回 taskId 列表
   /api/resume/async/batch/multiform- 混合批量（文件上传 + URL），立即返回 taskId 列表
   /api/tasks                       - 运维/调试：列出内存中全部任务
 """
@@ -18,12 +20,15 @@ from typing import List, Optional
 from fastapi import APIRouter, File, Form, UploadFile
 from fastapi.responses import JSONResponse
 
-from config import ALLOWED_EXTENSIONS, MAX_FILE_SIZE_MB, MAX_WORKERS, logger, set_log_context
+from config import ALLOWED_EXTENSIONS, ASYNC_MODEL_NAME, MAX_FILE_SIZE_MB, MAX_WORKERS, logger, set_log_context
 from utils.file_utils import get_pdf_source_from_content
+from api.schemas import AsyncBatchRequest, AsyncTagBatchRequest
 from core.tasks import (
     TaskRecord,
     _STATUS_DESC,
     _run_parse_and_tag,
+    _run_parse_only,
+    _run_tag_only,
     _task_lock,
     _task_store,
     executor,
@@ -51,7 +56,7 @@ async def async_parse_resume(
                     filename=file.filename or "resume.pdf")
 
     if requestId:
-        # 幂等检查：requestId 已存在则复用，避免重试时重复消耗 LLM 资源
+        # 幂等检查：requestId 已存在则复用，避免调用方重试时重复消耗 LLM 资源
         async with _task_lock:
             for rec in _task_store.values():
                 if getattr(rec, "request_id", None) == requestId:
@@ -71,6 +76,7 @@ async def async_parse_resume(
     task_id = str(uuid.uuid4())
     rec     = TaskRecord(task_id=task_id)
     if requestId:
+        # TaskRecord 是 dataclass，不含 request_id 字段；动态挂载避免为低频幂等场景污染数据类定义
         rec.request_id = requestId  # type: ignore[attr-defined]
     async with _task_lock:
         _task_store[task_id] = rec
@@ -81,7 +87,7 @@ async def async_parse_resume(
         "jobDescription":    jobDescription or "",
         "jobSensitiveWords": jobSensitiveWords or "",
     }
-    asyncio.create_task(_run_parse_and_tag(task_id, file_bytes, file.filename or "resume.pdf", job_info))
+    asyncio.create_task(_run_parse_and_tag(task_id, file_bytes, file.filename or "resume.pdf", job_info, ASYNC_MODEL_NAME))
     logger.info(f"[{task_id}] 任务入队 file={file.filename} jobTitle={jobTitle}")
     return JSONResponse(content={"code": 0, "msg": "success",
                                   "data": {"taskId": task_id, "status": 0, "estimatedSeconds": 90}})
@@ -101,6 +107,7 @@ async def get_async_result(taskId: str):
     async with _task_lock:
         rec = _task_store.get(taskId)
     if rec is None:
+        logger.info(f"[async/result] taskId={taskId} → 不存在或已过期")
         return JSONResponse(content={"code": 2001, "msg": "taskId 不存在或已过期（TTL 10min）", "data": None})
     elapsed = round(time.time() - rec.created_at, 1)
     data: dict = {
@@ -110,66 +117,41 @@ async def get_async_result(taskId: str):
     }
     if rec.status == 3:
         data["result"] = rec.result
+        body = {"code": 0, "msg": "success", "data": data}
+        logger.info(f"[async/result] taskId={taskId} status=3 已完成 耗时={elapsed}s")
+        for line in json.dumps(body, ensure_ascii=False, indent=2).splitlines():
+            logger.info(line)
+        return JSONResponse(content=body)
     elif rec.status == 4:
         data["errorMsg"] = rec.error_msg
+        logger.info(f"[async/result] taskId={taskId} status=4 失败: {rec.error_msg}")
+    else:
+        logger.info(f"[async/result] taskId={taskId} status={rec.status} {_STATUS_DESC.get(rec.status, '未知')} 耗时={elapsed}s")
     return JSONResponse(content={"code": 0, "msg": "success", "data": data})
 
 
 @router.post("/api/resume/async/batch")
-async def async_batch_parse(request: dict):
+async def async_batch_parse(request: AsyncBatchRequest):
     """
     【主要对外接口】批量异步解析+打标（JSON Body，仅支持 URL 方式）。
-
-    请求体格式：
-    {
-        "resumes": [
-            {
-                "type": "url",
-                "file": {
-                    "name": "张三.pdf",          # 文件名，用于日志和结果标识
-                    "path": "http://...",        # 可访问的 HTTP/HTTPS 下载链接
-                    "extra": "投递ID_12345"       # 可选，调用方业务标识，结果查询时原样返回
-                }
-            },
-            ...
-        ],
-        "jobTitle": "算法工程师",                 # 可选，岗位名称，影响打标结果
-        "requiredSkills": "Python,机器学习",      # 可选，技能要求，逗号分隔
-        "jobDescription": "...",                 # 可选，岗位 JD
-        "jobSensitiveWords": "竞业,保密协议"      # 可选，风险打标关键词
-    }
 
     响应体包含每份简历的 taskId（下载失败时 code≠0 且 taskId=null），
     通过 GET /api/resume/async/result?taskId=xxx 逐个轮询结果。
 
     设计约束：
       - 仅支持 type=url，不支持 base64/file（避免大文件占用请求内存）
-      - 单次上限 20 份；超量返回 code=1003
+      - 单次上限 20 份；超出时 Pydantic 返回 422
       - 文件下载在提交阶段同步完成（入队前校验可达性），失败的文件不入队
       - extra 字段透传：调用方可用投递 ID 等业务 key 与结果关联，无需自行维护映射表
     """
-    resumes_raw = request.get("resumes", [])
-    if not resumes_raw:
-        return JSONResponse(content={"code": 1001, "msg": "resumes 数组不能为空"})
-    if not isinstance(resumes_raw, list):
-        return JSONResponse(content={"code": 1001, "msg": "resumes 必须是数组"})
-    for item in resumes_raw:
-        if not isinstance(item, dict) or item.get("type") != "url":
-            t = item.get("type") if isinstance(item, dict) else type(item).__name__
-            return JSONResponse(content={"code": 1001, "msg": f"resumes 仅支持 type=url，不支持: {t}"})
-    if len(resumes_raw) > 20:
-        return JSONResponse(content={"code": 1003, "msg": f"共 {len(resumes_raw)} 份，单次最多提交 20 份"})
-
-    job_info = {k: request.get(k, "") or "" for k in ("jobTitle", "requiredSkills", "jobDescription", "jobSensitiveWords")}
+    job_info = request.to_job_info()
     loop     = asyncio.get_running_loop()
     tasks    = []
-    for item in resumes_raw:
-        file_meta = item.get("file", {})
-        filename  = file_meta.get("name", "resume.pdf")
-        # extra 优先取 file.extra，其次取顶层 extra；用于调用方业务关联（如投递 ID）
-        extra     = file_meta.get("extra") or item.get("extra") or None
+    for item in request.resumes:
+        filename = item.filename
+        extra    = item.effective_extra
         try:
-            source, fn = await loop.run_in_executor(executor, get_pdf_source_from_content, [item])
+            source, fn = await loop.run_in_executor(executor, get_pdf_source_from_content, [item.model_dump()])
         except Exception as e:
             tasks.append({"filename": filename, "extra": extra, "code": 1001,
                           "msg": f"文件下载失败: {str(e)}", "taskId": None})
@@ -181,16 +163,86 @@ async def async_batch_parse(request: dict):
         task_id = str(uuid.uuid4())
         async with _task_lock:
             _task_store[task_id] = TaskRecord(task_id=task_id, extra=extra)
-        asyncio.create_task(_run_parse_and_tag(task_id, source, fn or filename, job_info))
+        asyncio.create_task(_run_parse_and_tag(task_id, source, fn or filename, job_info, ASYNC_MODEL_NAME))
         logger.info(f"[batch] 任务入队 taskId={task_id} file={fn or filename} extra={extra}")
         tasks.append({"filename": fn or filename, "extra": extra, "code": 0,
                       "taskId": task_id, "status": 0, "statusDesc": "待处理"})
 
     submitted = sum(1 for t in tasks if t["code"] == 0)
     return JSONResponse(content={"code": 0, "msg": "success",
-                                  "total": len(resumes_raw), "submitted": submitted,
-                                  "failed": len(resumes_raw) - submitted,
+                                  "total": len(request.resumes), "submitted": submitted,
+                                  "failed": len(request.resumes) - submitted,
                                   "estimatedSeconds": 90, "tasks": tasks})
+
+
+@router.post("/api/resume/async/batch/parse")
+async def async_batch_parse_only(request: AsyncBatchRequest):
+    """
+    批量异步解析（仅解析，不打标），立即返回 taskId 列表。
+
+    请求体格式与 /api/resume/async/batch 完全一致（resumes 数组，每项 type=url）。
+    结果通过 GET /api/resume/async/result 轮询；status=3 时 result 包含：
+      filename / extra / resumeParseFinishTime / resume（解析后的结构化简历 JSON）。
+    result 可直接作为 /api/resume/async/batch/tag 的 resumes 数组元素输入。
+    """
+    loop  = asyncio.get_running_loop()
+    tasks = []
+    for item in request.resumes:
+        filename = item.filename
+        extra    = item.effective_extra
+        try:
+            source, fn = await loop.run_in_executor(executor, get_pdf_source_from_content, [item.model_dump()])
+        except Exception as e:
+            tasks.append({"filename": filename, "extra": extra, "code": 1001,
+                          "msg": f"文件下载失败: {str(e)}", "taskId": None})
+            continue
+        if source is None:
+            tasks.append({"filename": filename, "extra": extra, "code": 1001,
+                          "msg": "无法下载 PDF，请检查 URL 是否可访问", "taskId": None})
+            continue
+        task_id = str(uuid.uuid4())
+        async with _task_lock:
+            _task_store[task_id] = TaskRecord(task_id=task_id, extra=extra)
+        asyncio.create_task(_run_parse_only(task_id, source, fn or filename, ASYNC_MODEL_NAME))
+        logger.info(f"[batch/parse] 任务入队 taskId={task_id} file={fn or filename} extra={extra}")
+        tasks.append({"filename": fn or filename, "extra": extra, "code": 0,
+                      "taskId": task_id, "status": 0, "statusDesc": "待处理"})
+
+    submitted = sum(1 for t in tasks if t["code"] == 0)
+    return JSONResponse(content={"code": 0, "msg": "success",
+                                  "total": len(request.resumes), "submitted": submitted,
+                                  "failed": len(request.resumes) - submitted,
+                                  "estimatedSeconds": 60, "tasks": tasks})
+
+
+@router.post("/api/resume/async/batch/tag")
+async def async_batch_tag_only(request: AsyncTagBatchRequest):
+    """
+    批量异步打标（仅打标，不解析），立即返回 taskId 列表。
+
+    resumes 数组的每项结构与 /api/resume/async/batch/parse 结果（status=3 时的 result 字段）一致，
+    可直接将解析结果透传为打标输入。
+    结果通过 GET /api/resume/async/result 轮询；打标完成后 result 格式与 /api/resume/async/batch 完全一致。
+    单次上限 20 份。
+    """
+    job_info = request.to_job_info()
+    tasks    = []
+    for item in request.resumes:
+        task_id = str(uuid.uuid4())
+        async with _task_lock:
+            _task_store[task_id] = TaskRecord(task_id=task_id, extra=item.extra)
+        asyncio.create_task(_run_tag_only(
+            task_id, item.resume, item.filename, item.resumeParseFinishTime, job_info, ASYNC_MODEL_NAME
+        ))
+        logger.info(f"[batch/tag] 任务入队 taskId={task_id} file={item.filename} extra={item.extra}")
+        tasks.append({"filename": item.filename, "extra": item.extra, "code": 0,
+                      "taskId": task_id, "status": 0, "statusDesc": "待处理"})
+
+    submitted = sum(1 for t in tasks if t["code"] == 0)
+    return JSONResponse(content={"code": 0, "msg": "success",
+                                  "total": len(request.resumes), "submitted": submitted,
+                                  "failed": len(request.resumes) - submitted,
+                                  "estimatedSeconds": 30, "tasks": tasks})
 
 
 @router.post("/api/resume/async/batch/multiform")
@@ -258,7 +310,7 @@ async def async_batch_parse_multiform(
         task_id = str(uuid.uuid4())
         async with _task_lock:
             _task_store[task_id] = TaskRecord(task_id=task_id)
-        asyncio.create_task(_run_parse_and_tag(task_id, file_bytes, filename, job_info))
+        asyncio.create_task(_run_parse_and_tag(task_id, file_bytes, filename, job_info, ASYNC_MODEL_NAME))
         logger.info(f"[batch/multiform] 任务入队 taskId={task_id} file={filename} type=upload")
         tasks.append({"filename": filename, "code": 0, "taskId": task_id, "status": 0, "statusDesc": "待处理"})
 
@@ -280,7 +332,7 @@ async def async_batch_parse_multiform(
         task_id = str(uuid.uuid4())
         async with _task_lock:
             _task_store[task_id] = TaskRecord(task_id=task_id, extra=extra)
-        asyncio.create_task(_run_parse_and_tag(task_id, source, fn or filename, job_info))
+        asyncio.create_task(_run_parse_and_tag(task_id, source, fn or filename, job_info, ASYNC_MODEL_NAME))
         logger.info(f"[batch/multiform] 任务入队 taskId={task_id} file={fn or filename} type=url extra={extra}")
         tasks.append({"filename": fn or filename, "extra": extra, "code": 0,
                       "taskId": task_id, "status": 0, "statusDesc": "待处理"})

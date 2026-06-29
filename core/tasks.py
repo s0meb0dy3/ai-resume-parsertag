@@ -16,7 +16,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
-from config import MAX_WORKERS, TASK_TTL_MINUTES, logger, wrap_for_executor, set_log_context
+from config import (
+    MAX_WORKERS, TASK_TTL_MINUTES, logger, wrap_for_executor, set_log_context,
+    set_current_model_name, reset_current_model_name,
+)
 from core.parser import _llm_call, _parse_with_logging, _save_result
 from core.postprocess import _conform_to_template
 from tag.tagger import run_tagging
@@ -32,6 +35,7 @@ _STATUS_DESC = {0: "待处理", 1: "简历解析中", 2: "标签打标中", 3: "
 # 纯内存存储；服务重启后丢失，TTL 到期自动清理
 _task_store     : dict[str, "TaskRecord"] = {}
 _task_lock       = asyncio.Lock()
+# asyncio 层限流：防止 event loop 分发的任务数超过线程池容量，避免大量协程在 run_in_executor 前阻塞等待
 _parse_semaphore = asyncio.Semaphore(MAX_WORKERS)
 _cfg_lock        = asyncio.Lock()   # 保护 tag_config_runtime.json 的并发读写
 
@@ -114,7 +118,7 @@ def _log_tag_info(task_id: str, filename: str, tag_info: dict,
 # ── 解析+打标流水线 ───────────────────────────────────────────────
 
 @observe()
-async def _run_parse_and_tag(task_id: str, source, filename: str, job_info: dict):
+async def _run_parse_and_tag(task_id: str, source, filename: str, job_info: dict, model_name: str | None = None):
     """
     两阶段流水线：① PDF → 简历 JSON（受 _parse_semaphore 限流）② 简历 JSON → 打标结果。
     打标阶段不占 semaphore，允许解析与其他任务的打标并发执行，提高吞吐量。
@@ -123,6 +127,7 @@ async def _run_parse_and_tag(task_id: str, source, filename: str, job_info: dict
     loop           = asyncio.get_running_loop()
     pipeline_start = time.time()
     with propagate_attributes(tags=LANGFUSE_TAGS, session_id=task_id, user_id=filename):
+        token = set_current_model_name(model_name) if model_name else None
         try:
             # 阶段一：PDF 渲染 + LLM 解析（CPU/IO 密集，限流防止线程池积压）
             # set_log_context 必须在 wrap_for_executor 之前调用，使 copy_context() 能捕获正确的 ContextVar 快照
@@ -167,12 +172,9 @@ async def _run_parse_and_tag(task_id: str, source, filename: str, job_info: dict
                     "result":           result,
                 },
             }
-            SEP = "─" * 60
-            logger.debug(f"┌{SEP}")
-            logger.debug(f"│ 完整响应  文件: {filename}  taskId: {task_id}")
+            logger.info(f"[完整响应] taskId={task_id} file={filename}")
             for line in json.dumps(full_api_response, ensure_ascii=False, indent=2).splitlines():
-                logger.debug(f"│  {line}")
-            logger.debug(f"└{SEP}")
+                logger.info(line)
 
             _save_result(task_id, filename, result)
             update_current_observation(output={
@@ -189,3 +191,92 @@ async def _run_parse_and_tag(task_id: str, source, filename: str, job_info: dict
             logger.error(f"[{task_id}] 任务失败: {e}")
             update_current_observation(output={"taskId": task_id, "status": "failed", "error": str(e)})
             await _set_task_field(task_id, status=4, error_msg=str(e), completed_at=time.time())
+        finally:
+            if token is not None:
+                reset_current_model_name(token)
+
+
+@observe()
+async def _run_parse_only(task_id: str, source, filename: str, model_name: str | None = None):
+    """单独执行 PDF 简历解析，结果可作为异步打标接口输入。"""
+    loop           = asyncio.get_running_loop()
+    pipeline_start = time.time()
+    with propagate_attributes(tags=LANGFUSE_TAGS, session_id=task_id, user_id=filename):
+        token = set_current_model_name(model_name) if model_name else None
+        try:
+            set_log_context(request_id=task_id[:8], business_type="简历解析", filename=filename)
+            async with _parse_semaphore:
+                await _set_task_field(task_id, status=1)
+                resume = await loop.run_in_executor(
+                    executor, wrap_for_executor(_parse_with_logging), source, filename
+                )
+            resume_parse_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            completed_at      = time.time()
+
+            async with _task_lock:
+                rec = _task_store.get(task_id)
+            extra = rec.extra if rec else None
+            result = {
+                "filename": filename,
+                "extra": extra,
+                "resumeParseFinishTime": resume_parse_time,
+                "resume": resume,
+            }
+            update_current_observation(output={
+                "taskId": task_id,
+                "filename": filename,
+                "status": "parsed",
+                "elapsed": round(completed_at - pipeline_start, 1),
+            })
+            await _set_task_field(task_id, status=3, result=result, completed_at=completed_at)
+        except Exception as e:
+            logger.error(f"[{task_id}] 简历解析失败: {e}")
+            update_current_observation(output={"taskId": task_id, "status": "failed", "error": str(e)})
+            await _set_task_field(task_id, status=4, error_msg=str(e), completed_at=time.time())
+        finally:
+            if token is not None:
+                reset_current_model_name(token)
+
+
+@observe()
+async def _run_tag_only(
+    task_id: str,
+    resume: dict,
+    filename: str,
+    resume_parse_time: str,
+    job_info: dict,
+    model_name: str | None = None,
+):
+    """单独执行标签打标，最终 result 与解析+打标流水线一致。"""
+    loop      = asyncio.get_running_loop()
+    tag_start = time.time()
+    with propagate_attributes(tags=LANGFUSE_TAGS, session_id=task_id, user_id=filename):
+        token = set_current_model_name(model_name) if model_name else None
+        try:
+            set_log_context(request_id=task_id[:8], business_type="标签打标", filename=filename)
+            await _set_task_field(task_id, status=2)
+            tag_info = await loop.run_in_executor(
+                executor, wrap_for_executor(lambda: run_tagging(resume, job_info, llm_call_fn=_llm_call))
+            )
+            completed_at = time.time()
+            tag_elapsed  = completed_at - tag_start
+            _log_tag_info(task_id, filename, tag_info, resume_parse_time, tag_elapsed, tag_elapsed)
+            result = _conform_to_template(task_id, resume, tag_info, resume_parse_time)
+
+            _save_result(task_id, filename, result)
+            update_current_observation(output={
+                "taskId": task_id,
+                "filename": filename,
+                "status": "completed",
+                "elapsed": round(tag_elapsed, 1),
+                "candidate": result.get("candidate", {}).get("name", ""),
+                "confidence": result.get("tagInfo", {}).get("confidence"),
+            })
+            await _set_task_field(task_id, status=3, result=result, completed_at=completed_at)
+        except Exception as e:
+            logger.error(f"[{task_id}] 打标失败: {e}")
+            update_current_observation(output={"taskId": task_id, "status": "failed", "error": str(e)})
+            await _set_task_field(task_id, status=4, error_msg=str(e), completed_at=time.time())
+        finally:
+            if token is not None:
+                reset_current_model_name(token)

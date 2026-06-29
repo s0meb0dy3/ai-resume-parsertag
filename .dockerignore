@@ -9,5 +9,6 @@ uploads/
 results/
 test/
 docs/
+localmaterial/
 *.md
 .dockerignore
