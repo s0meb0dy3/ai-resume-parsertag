@@ -1,0 +1,3870 @@
+{
+  "version": "ai-resume-parsertag:ID-mapping-tag:V1.0.1-20260806",
+  "dimensions": [
+    {
+      "id": "1001",
+      "dimension": "education",
+      "displayName": "教育背景"
+    },
+    {
+      "id": "1002",
+      "dimension": "companyBg",
+      "displayName": "公司背景"
+    },
+    {
+      "id": "1003",
+      "dimension": "workYears",
+      "displayName": "工作年限"
+    },
+    {
+      "id": "1004",
+      "dimension": "skills",
+      "displayName": "技能标签"
+    },
+    {
+      "id": "1005",
+      "dimension": "industry",
+      "displayName": "行业背景"
+    },
+    {
+      "id": "2001",
+      "dimension": "jobstable",
+      "displayName": "职业稳定性风险"
+    },
+    {
+      "id": "2002",
+      "dimension": "integrity",
+      "displayName": "诚信与合规风险"
+    },
+    {
+      "id": "2003",
+      "dimension": "matchRisk",
+      "displayName": "匹配度硬伤"
+    },
+    {
+      "id": "2004",
+      "dimension": "location",
+      "displayName": "地域相关"
+    }
+  ],
+  "mappings": [
+    {
+      "id": "10010001",
+      "dimension": "education",
+      "value": "C9",
+      "aliases": [
+        "C9联盟"
+      ]
+    },
+    {
+      "id": "10010002",
+      "dimension": "education",
+      "value": "985",
+      "aliases": [
+        "985工程"
+      ]
+    },
+    {
+      "id": "10010003",
+      "dimension": "education",
+      "value": "211",
+      "aliases": [
+        "211工程"
+      ]
+    },
+    {
+      "id": "10010004",
+      "dimension": "education",
+      "value": "双一流",
+      "aliases": [
+        "双一流高校"
+      ]
+    },
+    {
+      "id": "10010005",
+      "dimension": "education",
+      "value": "海外名校QS50",
+      "aliases": [
+        "海外名校(QS50)",
+        "海外名校（QS50）",
+        "QS50",
+        "QS前50"
+      ]
+    },
+    {
+      "id": "10010006",
+      "dimension": "education",
+      "value": "海外名校QS100",
+      "aliases": [
+        "海外名校(QS100)",
+        "海外名校（QS100）",
+        "QS100",
+        "QS前100"
+      ]
+    },
+    {
+      "id": "10010007",
+      "dimension": "education",
+      "value": "海外硕士",
+      "aliases": []
+    },
+    {
+      "id": "10010008",
+      "dimension": "education",
+      "value": "博士",
+      "aliases": [
+        "博士研究生",
+        "PhD"
+      ]
+    },
+    {
+      "id": "10010009",
+      "dimension": "education",
+      "value": "硕士",
+      "aliases": [
+        "硕士研究生"
+      ]
+    },
+    {
+      "id": "10010010",
+      "dimension": "education",
+      "value": "本科",
+      "aliases": [
+        "学士"
+      ]
+    },
+    {
+      "id": "10010011",
+      "dimension": "education",
+      "value": "专科及以下",
+      "aliases": [
+        "专科",
+        "高职",
+        "中专"
+      ]
+    },
+    {
+      "id": "10020001",
+      "dimension": "companyBg",
+      "value": "行业龙头",
+      "aliases": [
+        "头部大厂",
+        "互联网大厂"
+      ]
+    },
+    {
+      "id": "10020002",
+      "dimension": "companyBg",
+      "value": "知名中大型企业",
+      "aliases": [
+        "腰部中厂",
+        "中型互联网公司"
+      ]
+    },
+    {
+      "id": "10020003",
+      "dimension": "companyBg",
+      "value": "世界500强",
+      "aliases": [
+        "外企500强",
+        "财富世界500强",
+        "外资500强"
+      ]
+    },
+    {
+      "id": "10020004",
+      "dimension": "companyBg",
+      "value": "中国500强",
+      "aliases": [
+        "中国企业500强"
+      ]
+    },
+    {
+      "id": "10020005",
+      "dimension": "companyBg",
+      "value": "中国民营500强",
+      "aliases": [
+        "民营企业500强"
+      ]
+    },
+    {
+      "id": "10020006",
+      "dimension": "companyBg",
+      "value": "知名跨国企业",
+      "aliases": [
+        "一线外企"
+      ]
+    },
+    {
+      "id": "10020007",
+      "dimension": "companyBg",
+      "value": "独角兽企业",
+      "aliases": [
+        "独角兽"
+      ]
+    },
+    {
+      "id": "10020008",
+      "dimension": "companyBg",
+      "value": "高成长创业公司",
+      "aliases": [
+        "明星创业",
+        "明星创业公司"
+      ]
+    },
+    {
+      "id": "10020009",
+      "dimension": "companyBg",
+      "value": "国企/央企",
+      "aliases": [
+        "国企",
+        "央企"
+      ]
+    },
+    {
+      "id": "10020010",
+      "dimension": "companyBg",
+      "value": "上市公司",
+      "aliases": []
+    },
+    {
+      "id": "10020011",
+      "dimension": "companyBg",
+      "value": "高新技术企业",
+      "aliases": [
+        "国家高新技术企业"
+      ]
+    },
+    {
+      "id": "10020012",
+      "dimension": "companyBg",
+      "value": "专精特新企业",
+      "aliases": [
+        "专精特新"
+      ]
+    },
+    {
+      "id": "10020013",
+      "dimension": "companyBg",
+      "value": "专精特新小巨人",
+      "aliases": [
+        "国家级专精特新小巨人",
+        "小巨人企业"
+      ]
+    },
+    {
+      "id": "10020014",
+      "dimension": "companyBg",
+      "value": "制造业单项冠军",
+      "aliases": [
+        "单项冠军企业"
+      ]
+    },
+    {
+      "id": "10020015",
+      "dimension": "companyBg",
+      "value": "国家级企业技术中心",
+      "aliases": [
+        "国家企业技术中心"
+      ]
+    },
+    {
+      "id": "10020016",
+      "dimension": "companyBg",
+      "value": "科研院所/事业单位",
+      "aliases": [
+        "科研院所",
+        "事业单位"
+      ]
+    },
+    {
+      "id": "10030001",
+      "dimension": "workYears",
+      "value": "应届",
+      "aliases": [
+        "校招应届"
+      ]
+    },
+    {
+      "id": "10030002",
+      "dimension": "workYears",
+      "value": "往届无经验",
+      "aliases": [
+        "往届无正式工作经验"
+      ]
+    },
+    {
+      "id": "10030003",
+      "dimension": "workYears",
+      "value": "1年以下",
+      "aliases": [
+        "不足1年",
+        "0-1年",
+        "0～1年"
+      ]
+    },
+    {
+      "id": "10030004",
+      "dimension": "workYears",
+      "value": "1-3年（满1年）",
+      "aliases": [
+        "1-3年",
+        "1～3年"
+      ]
+    },
+    {
+      "id": "10030005",
+      "dimension": "workYears",
+      "value": "3-5年（满3年）",
+      "aliases": [
+        "3-5年",
+        "3～5年"
+      ]
+    },
+    {
+      "id": "10030006",
+      "dimension": "workYears",
+      "value": "5-10年（满5年）",
+      "aliases": [
+        "5-10年",
+        "5～10年"
+      ]
+    },
+    {
+      "id": "10030007",
+      "dimension": "workYears",
+      "value": "10年及以上",
+      "aliases": [
+        "10年+",
+        "10年以上",
+        "10-15年",
+        "10～15年",
+        "15年+",
+        "15年以上"
+      ]
+    },
+    {
+      "id": "10040001",
+      "dimension": "skills",
+      "value": "Python",
+      "category": "编程语言与开发框架",
+      "aliases": [
+        "Python3",
+        "Python开发",
+        "Python编程"
+      ]
+    },
+    {
+      "id": "10040002",
+      "dimension": "skills",
+      "value": "C",
+      "category": "编程语言与开发框架",
+      "aliases": [
+        "C语言",
+        "C程序设计",
+        "嵌入式C"
+      ]
+    },
+    {
+      "id": "10040003",
+      "dimension": "skills",
+      "value": "C++",
+      "category": "编程语言与开发框架",
+      "aliases": [
+        "CPP",
+        "C Plus Plus",
+        "C++开发"
+      ]
+    },
+    {
+      "id": "10040004",
+      "dimension": "skills",
+      "value": "SQL",
+      "category": "编程语言与开发框架",
+      "aliases": [
+        "结构化查询语言",
+        "SQL开发",
+        "数据库查询"
+      ]
+    },
+    {
+      "id": "10040005",
+      "dimension": "skills",
+      "value": "Shell",
+      "category": "编程语言与开发框架",
+      "aliases": [
+        "Shell脚本",
+        "Bash",
+        "Linux脚本"
+      ]
+    },
+    {
+      "id": "10040006",
+      "dimension": "skills",
+      "value": "MATLAB",
+      "category": "编程语言与开发框架",
+      "aliases": [
+        "Matlab",
+        "MATLAB编程",
+        "数值计算"
+      ]
+    },
+    {
+      "id": "10040007",
+      "dimension": "skills",
+      "value": "Simulink",
+      "category": "编程语言与开发框架",
+      "aliases": [
+        "MATLAB/Simulink",
+        "Simulink建模",
+        "模型仿真"
+      ]
+    },
+    {
+      "id": "10040008",
+      "dimension": "skills",
+      "value": "Stateflow",
+      "category": "编程语言与开发框架",
+      "aliases": [
+        "MATLAB Stateflow",
+        "状态机建模",
+        "状态逻辑"
+      ]
+    },
+    {
+      "id": "10040009",
+      "dimension": "skills",
+      "value": "FastAPI",
+      "category": "编程语言与开发框架",
+      "aliases": [
+        "FastAPI框架",
+        "Python Web API",
+        "API服务"
+      ]
+    },
+    {
+      "id": "10040010",
+      "dimension": "skills",
+      "value": "Flask",
+      "category": "编程语言与开发框架",
+      "aliases": [
+        "Flask框架",
+        "Python Web开发",
+        "Web API"
+      ]
+    },
+    {
+      "id": "10040011",
+      "dimension": "skills",
+      "value": "Django",
+      "category": "编程语言与开发框架",
+      "aliases": [
+        "Django框架",
+        "Python Web框架",
+        "Web开发"
+      ]
+    },
+    {
+      "id": "10040012",
+      "dimension": "skills",
+      "value": "RESTful API",
+      "category": "编程语言与开发框架",
+      "aliases": [
+        "REST API",
+        "HTTP API",
+        "接口开发"
+      ]
+    },
+    {
+      "id": "10040013",
+      "dimension": "skills",
+      "value": "Docker",
+      "category": "编程语言与开发框架",
+      "aliases": [
+        "Docker容器",
+        "容器化",
+        "镜像构建"
+      ]
+    },
+    {
+      "id": "10040014",
+      "dimension": "skills",
+      "value": "Kubernetes",
+      "category": "编程语言与开发框架",
+      "aliases": [
+        "K8s",
+        "容器编排",
+        "Kubernetes集群"
+      ]
+    },
+    {
+      "id": "10040015",
+      "dimension": "skills",
+      "value": "Git",
+      "category": "编程语言与开发框架",
+      "aliases": [
+        "Git版本控制",
+        "代码版本管理",
+        "GitHub"
+      ]
+    },
+    {
+      "id": "10040016",
+      "dimension": "skills",
+      "value": "嵌入式开发",
+      "category": "编程语言与开发框架",
+      "aliases": [
+        "Embedded Development",
+        "嵌入式软件",
+        "嵌入式系统"
+      ]
+    },
+    {
+      "id": "10040017",
+      "dimension": "skills",
+      "value": "软件架构设计",
+      "category": "编程语言与开发框架",
+      "aliases": [
+        "系统架构设计",
+        "Software Architecture",
+        "技术架构"
+      ]
+    },
+    {
+      "id": "10040018",
+      "dimension": "skills",
+      "value": "系统集成",
+      "category": "编程语言与开发框架",
+      "aliases": [
+        "System Integration",
+        "应用集成",
+        "系统对接"
+      ]
+    },
+    {
+      "id": "10040019",
+      "dimension": "skills",
+      "value": "Java",
+      "category": "编程语言与开发框架",
+      "aliases": [
+        "Java开发",
+        "Java编程",
+        "JDK"
+      ]
+    },
+    {
+      "id": "10040020",
+      "dimension": "skills",
+      "value": "C#",
+      "category": "编程语言与开发框架",
+      "aliases": [
+        "C Sharp",
+        ".NET C#",
+        "C#开发"
+      ]
+    },
+    {
+      "id": "10040021",
+      "dimension": "skills",
+      "value": "JavaScript",
+      "category": "编程语言与开发框架",
+      "aliases": [
+        "JS",
+        "ECMAScript",
+        "JavaScript开发"
+      ]
+    },
+    {
+      "id": "10040022",
+      "dimension": "skills",
+      "value": "TypeScript",
+      "category": "编程语言与开发框架",
+      "aliases": [
+        "TS",
+        "TypeScript开发",
+        "类型化JavaScript"
+      ]
+    },
+    {
+      "id": "10040023",
+      "dimension": "skills",
+      "value": "Spring Boot",
+      "category": "编程语言与开发框架",
+      "aliases": [
+        "SpringBoot",
+        "Spring框架",
+        "Java后端框架"
+      ]
+    },
+    {
+      "id": "10040024",
+      "dimension": "skills",
+      "value": "Vue.js",
+      "category": "编程语言与开发框架",
+      "aliases": [
+        "Vue",
+        "Vue 3",
+        "Vue框架"
+      ]
+    },
+    {
+      "id": "10040025",
+      "dimension": "skills",
+      "value": "React",
+      "category": "编程语言与开发框架",
+      "aliases": [
+        "React.js",
+        "ReactJS",
+        "React前端框架"
+      ]
+    },
+    {
+      "id": "10040026",
+      "dimension": "skills",
+      "value": "Qt",
+      "category": "编程语言与开发框架",
+      "aliases": [
+        "Qt Framework",
+        "Qt开发",
+        "C++ GUI"
+      ]
+    },
+    {
+      "id": "10040027",
+      "dimension": "skills",
+      "value": "CMake",
+      "category": "编程语言与开发框架",
+      "aliases": [
+        "CMake构建",
+        "跨平台构建",
+        "构建系统"
+      ]
+    },
+    {
+      "id": "10040028",
+      "dimension": "skills",
+      "value": "数据分析",
+      "category": "AI与数据智能",
+      "aliases": [
+        "数据处理",
+        "数据统计",
+        "数据洞察",
+        "数据可视化"
+      ]
+    },
+    {
+      "id": "10040029",
+      "dimension": "skills",
+      "value": "机器学习",
+      "category": "AI与数据智能",
+      "aliases": [
+        "ML",
+        "Machine Learning",
+        "机器学习算法"
+      ]
+    },
+    {
+      "id": "10040030",
+      "dimension": "skills",
+      "value": "深度学习",
+      "category": "AI与数据智能",
+      "aliases": [
+        "DL",
+        "Deep Learning",
+        "神经网络"
+      ]
+    },
+    {
+      "id": "10040031",
+      "dimension": "skills",
+      "value": "计算机视觉",
+      "category": "AI与数据智能",
+      "aliases": [
+        "CV",
+        "Computer Vision",
+        "通用视觉算法",
+        "图像理解"
+      ]
+    },
+    {
+      "id": "10040032",
+      "dimension": "skills",
+      "value": "自然语言处理",
+      "category": "AI与数据智能",
+      "aliases": [
+        "NLP",
+        "Natural Language Processing",
+        "文本算法"
+      ]
+    },
+    {
+      "id": "10040033",
+      "dimension": "skills",
+      "value": "大语言模型",
+      "category": "AI与数据智能",
+      "aliases": [
+        "LLM",
+        "大模型",
+        "GPT",
+        "Qwen",
+        "通义千问",
+        "DeepSeek",
+        "Kimi",
+        "Llama",
+        "Claude"
+      ]
+    },
+    {
+      "id": "10040034",
+      "dimension": "skills",
+      "value": "AI Agent",
+      "category": "AI与数据智能",
+      "aliases": [
+        "Agent",
+        "大模型Agent",
+        "智能体",
+        "智能体开发"
+      ]
+    },
+    {
+      "id": "10040035",
+      "dimension": "skills",
+      "value": "RAG",
+      "category": "AI与数据智能",
+      "aliases": [
+        "检索增强生成",
+        "Retrieval-Augmented Generation",
+        "知识增强生成"
+      ]
+    },
+    {
+      "id": "10040036",
+      "dimension": "skills",
+      "value": "知识库构建",
+      "category": "AI与数据智能",
+      "aliases": [
+        "企业知识库",
+        "Knowledge Base",
+        "知识工程",
+        "知识库开发"
+      ]
+    },
+    {
+      "id": "10040037",
+      "dimension": "skills",
+      "value": "向量检索",
+      "category": "AI与数据智能",
+      "aliases": [
+        "语义检索",
+        "Vector Search",
+        "向量搜索"
+      ]
+    },
+    {
+      "id": "10040038",
+      "dimension": "skills",
+      "value": "Milvus",
+      "category": "AI与数据智能",
+      "aliases": [
+        "Milvus向量数据库",
+        "Milvus DB"
+      ]
+    },
+    {
+      "id": "10040039",
+      "dimension": "skills",
+      "value": "Elasticsearch",
+      "category": "AI与数据智能",
+      "aliases": [
+        "ES",
+        "Elastic Search",
+        "全文检索"
+      ]
+    },
+    {
+      "id": "10040040",
+      "dimension": "skills",
+      "value": "Rerank模型",
+      "category": "AI与数据智能",
+      "aliases": [
+        "重排序",
+        "检索重排",
+        "Reranking",
+        "重排序模型"
+      ]
+    },
+    {
+      "id": "10040041",
+      "dimension": "skills",
+      "value": "提示词工程",
+      "category": "AI与数据智能",
+      "aliases": [
+        "Prompt Engineering",
+        "Prompt工程",
+        "提示词设计",
+        "提示词优化"
+      ]
+    },
+    {
+      "id": "10040042",
+      "dimension": "skills",
+      "value": "模型微调",
+      "category": "AI与数据智能",
+      "aliases": [
+        "Fine-tuning",
+        "大模型微调",
+        "模型精调"
+      ]
+    },
+    {
+      "id": "10040043",
+      "dimension": "skills",
+      "value": "SFT",
+      "category": "AI与数据智能",
+      "aliases": [
+        "监督微调",
+        "Supervised Fine-Tuning",
+        "指令微调"
+      ]
+    },
+    {
+      "id": "10040044",
+      "dimension": "skills",
+      "value": "LoRA",
+      "category": "AI与数据智能",
+      "aliases": [
+        "Low-Rank Adaptation",
+        "低秩适配",
+        "参数高效微调"
+      ]
+    },
+    {
+      "id": "10040045",
+      "dimension": "skills",
+      "value": "RLHF",
+      "category": "AI与数据智能",
+      "aliases": [
+        "人类反馈强化学习",
+        "Reinforcement Learning from Human Feedback"
+      ]
+    },
+    {
+      "id": "10040046",
+      "dimension": "skills",
+      "value": "模型评测",
+      "category": "AI与数据智能",
+      "aliases": [
+        "Model Evaluation",
+        "大模型评估",
+        "自动化评测",
+        "幻觉评估"
+      ]
+    },
+    {
+      "id": "10040047",
+      "dimension": "skills",
+      "value": "A/B测试",
+      "category": "AI与数据智能",
+      "aliases": [
+        "AB测试",
+        "A/B Test",
+        "对照实验"
+      ]
+    },
+    {
+      "id": "10040048",
+      "dimension": "skills",
+      "value": "模型部署与推理服务",
+      "category": "AI与数据智能",
+      "aliases": [
+        "模型部署",
+        "推理服务",
+        "模型服务API",
+        "推理加速"
+      ]
+    },
+    {
+      "id": "10040049",
+      "dimension": "skills",
+      "value": "vLLM",
+      "category": "AI与数据智能",
+      "aliases": [
+        "vLLM推理",
+        "大模型推理引擎",
+        "LLM Serving"
+      ]
+    },
+    {
+      "id": "10040050",
+      "dimension": "skills",
+      "value": "PyTorch",
+      "category": "AI与数据智能",
+      "aliases": [
+        "Torch",
+        "PyTorch框架",
+        "PyTorch深度学习框架"
+      ]
+    },
+    {
+      "id": "10040051",
+      "dimension": "skills",
+      "value": "TensorFlow",
+      "category": "AI与数据智能",
+      "aliases": [
+        "TF",
+        "TensorFlow框架",
+        "TensorFlow深度学习框架"
+      ]
+    },
+    {
+      "id": "10040052",
+      "dimension": "skills",
+      "value": "DeepSpeed",
+      "category": "AI与数据智能",
+      "aliases": [
+        "DeepSpeed训练",
+        "ZeRO",
+        "分布式训练加速"
+      ]
+    },
+    {
+      "id": "10040053",
+      "dimension": "skills",
+      "value": "Megatron",
+      "category": "AI与数据智能",
+      "aliases": [
+        "Megatron-LM",
+        "Megatron训练框架",
+        "大模型并行训练"
+      ]
+    },
+    {
+      "id": "10040054",
+      "dimension": "skills",
+      "value": "LangChain",
+      "category": "AI与数据智能",
+      "aliases": [
+        "LangChain框架",
+        "LLM应用框架",
+        "Agent框架"
+      ]
+    },
+    {
+      "id": "10040055",
+      "dimension": "skills",
+      "value": "LangGraph",
+      "category": "AI与数据智能",
+      "aliases": [
+        "LangGraph框架",
+        "Agent状态图",
+        "智能体编排"
+      ]
+    },
+    {
+      "id": "10040056",
+      "dimension": "skills",
+      "value": "LlamaIndex",
+      "category": "AI与数据智能",
+      "aliases": [
+        "Llama Index",
+        "RAG框架",
+        "知识库框架"
+      ]
+    },
+    {
+      "id": "10040057",
+      "dimension": "skills",
+      "value": "Dify",
+      "category": "AI与数据智能",
+      "aliases": [
+        "Dify平台",
+        "LLM应用平台",
+        "低代码AI平台"
+      ]
+    },
+    {
+      "id": "10040058",
+      "dimension": "skills",
+      "value": "OpenCV",
+      "category": "AI与数据智能",
+      "aliases": [
+        "Open Source Computer Vision Library",
+        "OpenCV开发",
+        "图像处理库"
+      ]
+    },
+    {
+      "id": "10040059",
+      "dimension": "skills",
+      "value": "NumPy",
+      "category": "AI与数据智能",
+      "aliases": [
+        "numpy",
+        "Python数值计算",
+        "科学计算库"
+      ]
+    },
+    {
+      "id": "10040060",
+      "dimension": "skills",
+      "value": "Pandas",
+      "category": "AI与数据智能",
+      "aliases": [
+        "pandas",
+        "Python数据分析",
+        "DataFrame"
+      ]
+    },
+    {
+      "id": "10040061",
+      "dimension": "skills",
+      "value": "scikit-learn",
+      "category": "AI与数据智能",
+      "aliases": [
+        "sklearn",
+        "Scikit Learn",
+        "Python机器学习库"
+      ]
+    },
+    {
+      "id": "10040062",
+      "dimension": "skills",
+      "value": "Hugging Face Transformers",
+      "category": "AI与数据智能",
+      "aliases": [
+        "Transformers",
+        "Hugging Face",
+        "预训练模型库"
+      ]
+    },
+    {
+      "id": "10040063",
+      "dimension": "skills",
+      "value": "CUDA",
+      "category": "AI与数据智能",
+      "aliases": [
+        "NVIDIA CUDA",
+        "GPU编程",
+        "CUDA加速"
+      ]
+    },
+    {
+      "id": "10040064",
+      "dimension": "skills",
+      "value": "ONNX",
+      "category": "AI与数据智能",
+      "aliases": [
+        "Open Neural Network Exchange",
+        "模型交换格式",
+        "ONNX Runtime"
+      ]
+    },
+    {
+      "id": "10040065",
+      "dimension": "skills",
+      "value": "TensorRT",
+      "category": "AI与数据智能",
+      "aliases": [
+        "NVIDIA TensorRT",
+        "模型推理优化",
+        "GPU推理加速"
+      ]
+    },
+    {
+      "id": "10040066",
+      "dimension": "skills",
+      "value": "Linux",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "Linux系统",
+        "GNU/Linux",
+        "Linux运维"
+      ]
+    },
+    {
+      "id": "10040067",
+      "dimension": "skills",
+      "value": "Windows Server",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "Windows服务器",
+        "Windows系统运维"
+      ]
+    },
+    {
+      "id": "10040068",
+      "dimension": "skills",
+      "value": "HPC",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "高性能计算",
+        "HPC集群",
+        "高性能计算集群"
+      ]
+    },
+    {
+      "id": "10040069",
+      "dimension": "skills",
+      "value": "服务器运维",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "Server Operations",
+        "服务器管理",
+        "主机运维"
+      ]
+    },
+    {
+      "id": "10040070",
+      "dimension": "skills",
+      "value": "计算资源调度",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "资源调度",
+        "作业调度",
+        "集群调度"
+      ]
+    },
+    {
+      "id": "10040071",
+      "dimension": "skills",
+      "value": "网络规划",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "网络架构规划",
+        "网络建设",
+        "网络设计"
+      ]
+    },
+    {
+      "id": "10040072",
+      "dimension": "skills",
+      "value": "网络运维",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "网络管理",
+        "网络维护",
+        "Network Operations"
+      ]
+    },
+    {
+      "id": "10040073",
+      "dimension": "skills",
+      "value": "网络故障排查",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "网络排障",
+        "网络问题定位",
+        "Network Troubleshooting"
+      ]
+    },
+    {
+      "id": "10040074",
+      "dimension": "skills",
+      "value": "IDC机房运维",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "数据中心运维",
+        "机房运维",
+        "IDC运维"
+      ]
+    },
+    {
+      "id": "10040075",
+      "dimension": "skills",
+      "value": "桌面运维",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "终端运维",
+        "IT桌面支持",
+        "Desktop Support"
+      ]
+    },
+    {
+      "id": "10040076",
+      "dimension": "skills",
+      "value": "IT资产管理",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "信息资产管理",
+        "IT设备管理",
+        "资产盘点"
+      ]
+    },
+    {
+      "id": "10040077",
+      "dimension": "skills",
+      "value": "权限管理",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "账号权限",
+        "访问控制",
+        "账户管理"
+      ]
+    },
+    {
+      "id": "10040078",
+      "dimension": "skills",
+      "value": "数据备份",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "备份策略",
+        "Backup",
+        "系统备份"
+      ]
+    },
+    {
+      "id": "10040079",
+      "dimension": "skills",
+      "value": "灾难恢复",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "Disaster Recovery",
+        "灾备",
+        "数据恢复"
+      ]
+    },
+    {
+      "id": "10040080",
+      "dimension": "skills",
+      "value": "Nginx",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "Nginx服务器",
+        "反向代理",
+        "Web服务器"
+      ]
+    },
+    {
+      "id": "10040081",
+      "dimension": "skills",
+      "value": "Tomcat",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "Apache Tomcat",
+        "Java应用服务器",
+        "Tomcat运维"
+      ]
+    },
+    {
+      "id": "10040082",
+      "dimension": "skills",
+      "value": "Redis",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "Redis缓存",
+        "内存数据库",
+        "Redis运维"
+      ]
+    },
+    {
+      "id": "10040083",
+      "dimension": "skills",
+      "value": "Zabbix",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "ZABBIX",
+        "监控系统",
+        "基础设施监控"
+      ]
+    },
+    {
+      "id": "10040084",
+      "dimension": "skills",
+      "value": "JumpServer",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "JumpServer堡垒机",
+        "堡垒机",
+        "运维审计平台"
+      ]
+    },
+    {
+      "id": "10040085",
+      "dimension": "skills",
+      "value": "MySQL",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "MySQL数据库",
+        "MySQL DB",
+        "关系型数据库"
+      ]
+    },
+    {
+      "id": "10040086",
+      "dimension": "skills",
+      "value": "Oracle",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "Oracle数据库",
+        "Oracle DB",
+        "Oracle数据库管理"
+      ]
+    },
+    {
+      "id": "10040087",
+      "dimension": "skills",
+      "value": "SQL Server",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "Microsoft SQL Server",
+        "MSSQL",
+        "SQLServer"
+      ]
+    },
+    {
+      "id": "10040088",
+      "dimension": "skills",
+      "value": "数据库运维",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "DBA",
+        "数据库管理",
+        "数据库维护"
+      ]
+    },
+    {
+      "id": "10040089",
+      "dimension": "skills",
+      "value": "OA",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "OA系统",
+        "办公自动化系统",
+        "协同办公系统"
+      ]
+    },
+    {
+      "id": "10040090",
+      "dimension": "skills",
+      "value": "ERP",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "ERP系统",
+        "企业资源计划",
+        "企业管理系统"
+      ]
+    },
+    {
+      "id": "10040091",
+      "dimension": "skills",
+      "value": "MES",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "MES系统",
+        "制造执行系统",
+        "生产执行系统"
+      ]
+    },
+    {
+      "id": "10040092",
+      "dimension": "skills",
+      "value": "PLM",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "PLM系统",
+        "产品生命周期管理",
+        "研发管理系统"
+      ]
+    },
+    {
+      "id": "10040093",
+      "dimension": "skills",
+      "value": "CRM",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "CRM系统",
+        "客户关系管理系统",
+        "销售管理系统"
+      ]
+    },
+    {
+      "id": "10040094",
+      "dimension": "skills",
+      "value": "业务流程建模",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "流程建模",
+        "业务流程设计",
+        "Workflow Modeling"
+      ]
+    },
+    {
+      "id": "10040095",
+      "dimension": "skills",
+      "value": "信息安全",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "网络安全",
+        "Information Security",
+        "信息安全管理"
+      ]
+    },
+    {
+      "id": "10040096",
+      "dimension": "skills",
+      "value": "Prometheus",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "Prometheus监控",
+        "时序监控",
+        "指标采集"
+      ]
+    },
+    {
+      "id": "10040097",
+      "dimension": "skills",
+      "value": "Grafana",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "Grafana可视化",
+        "监控看板",
+        "指标仪表盘"
+      ]
+    },
+    {
+      "id": "10040098",
+      "dimension": "skills",
+      "value": "VMware",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "VMware vSphere",
+        "ESXi",
+        "服务器虚拟化"
+      ]
+    },
+    {
+      "id": "10040099",
+      "dimension": "skills",
+      "value": "Ansible",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "Ansible自动化",
+        "配置管理",
+        "自动化运维"
+      ]
+    },
+    {
+      "id": "10040100",
+      "dimension": "skills",
+      "value": "CI/CD",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "持续集成",
+        "持续交付",
+        "Continuous Integration",
+        "Continuous Delivery"
+      ]
+    },
+    {
+      "id": "10040101",
+      "dimension": "skills",
+      "value": "PostgreSQL",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "Postgres",
+        "PostgreSQL数据库",
+        "PG数据库"
+      ]
+    },
+    {
+      "id": "10040102",
+      "dimension": "skills",
+      "value": "TCP/IP",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "TCP IP",
+        "网络协议栈",
+        "传输控制协议"
+      ]
+    },
+    {
+      "id": "10040103",
+      "dimension": "skills",
+      "value": "防火墙配置",
+      "category": "IT基础设施与信息系统",
+      "aliases": [
+        "Firewall Configuration",
+        "安全策略配置",
+        "网络访问控制"
+      ]
+    },
+    {
+      "id": "10040104",
+      "dimension": "skills",
+      "value": "电磁场与电磁波",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "电磁场理论",
+        "Electromagnetic Field",
+        "电磁学"
+      ]
+    },
+    {
+      "id": "10040105",
+      "dimension": "skills",
+      "value": "微波技术",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "微波工程",
+        "Microwave Engineering",
+        "微波理论"
+      ]
+    },
+    {
+      "id": "10040106",
+      "dimension": "skills",
+      "value": "电磁仿真",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "Electromagnetic Simulation",
+        "电磁建模",
+        "全波仿真"
+      ]
+    },
+    {
+      "id": "10040107",
+      "dimension": "skills",
+      "value": "HFSS",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "Ansys HFSS",
+        "高频结构仿真",
+        "三维电磁仿真"
+      ]
+    },
+    {
+      "id": "10040108",
+      "dimension": "skills",
+      "value": "CST",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "CST Studio Suite",
+        "CST Microwave Studio",
+        "CST电磁仿真"
+      ]
+    },
+    {
+      "id": "10040109",
+      "dimension": "skills",
+      "value": "FEKO",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "Altair FEKO",
+        "电磁场仿真",
+        "天线仿真软件"
+      ]
+    },
+    {
+      "id": "10040110",
+      "dimension": "skills",
+      "value": "ADS",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "Advanced Design System",
+        "Keysight ADS",
+        "射频电路仿真"
+      ]
+    },
+    {
+      "id": "10040111",
+      "dimension": "skills",
+      "value": "射频电路设计",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "RF电路设计",
+        "射频硬件设计",
+        "微波电路"
+      ]
+    },
+    {
+      "id": "10040112",
+      "dimension": "skills",
+      "value": "射频系统设计",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "RF系统",
+        "射频链路设计",
+        "微波射频系统"
+      ]
+    },
+    {
+      "id": "10040113",
+      "dimension": "skills",
+      "value": "微波射频测试",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "射频测试",
+        "微波测试",
+        "RF Testing"
+      ]
+    },
+    {
+      "id": "10040114",
+      "dimension": "skills",
+      "value": "天线设计",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "Antenna Design",
+        "天线研发",
+        "天线方案设计"
+      ]
+    },
+    {
+      "id": "10040115",
+      "dimension": "skills",
+      "value": "天线阵列设计",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "阵列天线",
+        "Antenna Array",
+        "相控阵设计"
+      ]
+    },
+    {
+      "id": "10040116",
+      "dimension": "skills",
+      "value": "天线仿真",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "天线电磁仿真",
+        "Antenna Simulation",
+        "天线建模"
+      ]
+    },
+    {
+      "id": "10040117",
+      "dimension": "skills",
+      "value": "天线工艺",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "天线工艺设计",
+        "天线制造工艺",
+        "天线生产工艺"
+      ]
+    },
+    {
+      "id": "10040118",
+      "dimension": "skills",
+      "value": "天线装配",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "天线组装",
+        "Antenna Assembly",
+        "天线电装"
+      ]
+    },
+    {
+      "id": "10040119",
+      "dimension": "skills",
+      "value": "天线调试",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "Antenna Tuning",
+        "天线调测",
+        "天线性能调试"
+      ]
+    },
+    {
+      "id": "10040120",
+      "dimension": "skills",
+      "value": "天线测试",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "Antenna Testing",
+        "天线性能测试",
+        "天线测量"
+      ]
+    },
+    {
+      "id": "10040121",
+      "dimension": "skills",
+      "value": "天线罩设计",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "Radome Design",
+        "雷达罩设计",
+        "天线罩电磁设计"
+      ]
+    },
+    {
+      "id": "10040122",
+      "dimension": "skills",
+      "value": "综合孔径设计",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "Integrated Aperture",
+        "综合孔径电磁设计",
+        "共形孔径"
+      ]
+    },
+    {
+      "id": "10040123",
+      "dimension": "skills",
+      "value": "RCS分析",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "雷达散射截面",
+        "电磁散射分析",
+        "Radar Cross Section"
+      ]
+    },
+    {
+      "id": "10040124",
+      "dimension": "skills",
+      "value": "雷达信号处理",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "Radar Signal Processing",
+        "雷达算法",
+        "雷达数据处理"
+      ]
+    },
+    {
+      "id": "10040125",
+      "dimension": "skills",
+      "value": "数字信号处理",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "Digital Signal Processing",
+        "信号处理算法",
+        "DSP算法"
+      ]
+    },
+    {
+      "id": "10040126",
+      "dimension": "skills",
+      "value": "SDR",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "软件无线电",
+        "Software Defined Radio",
+        "软件定义无线电"
+      ]
+    },
+    {
+      "id": "10040127",
+      "dimension": "skills",
+      "value": "OFDM",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "正交频分复用",
+        "Orthogonal Frequency Division Multiplexing"
+      ]
+    },
+    {
+      "id": "10040128",
+      "dimension": "skills",
+      "value": "LFM",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "线性调频",
+        "Linear Frequency Modulation",
+        "线性调频信号"
+      ]
+    },
+    {
+      "id": "10040129",
+      "dimension": "skills",
+      "value": "CFAR",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "恒虚警检测",
+        "Constant False Alarm Rate",
+        "雷达目标恒虚警检测"
+      ]
+    },
+    {
+      "id": "10040130",
+      "dimension": "skills",
+      "value": "ISAR",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "逆合成孔径雷达",
+        "Inverse SAR",
+        "雷达成像"
+      ]
+    },
+    {
+      "id": "10040131",
+      "dimension": "skills",
+      "value": "FPGA",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "FPGA开发",
+        "可编程逻辑",
+        "FPGA设计"
+      ]
+    },
+    {
+      "id": "10040132",
+      "dimension": "skills",
+      "value": "DSP",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "数字信号处理器",
+        "DSP开发",
+        "DSP编程"
+      ]
+    },
+    {
+      "id": "10040133",
+      "dimension": "skills",
+      "value": "Vivado",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "Xilinx Vivado",
+        "Xilinx FPGA开发工具",
+        "Vivado Design Suite"
+      ]
+    },
+    {
+      "id": "10040134",
+      "dimension": "skills",
+      "value": "Quartus",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "Intel Quartus",
+        "Quartus Prime",
+        "Intel FPGA开发工具"
+      ]
+    },
+    {
+      "id": "10040135",
+      "dimension": "skills",
+      "value": "Altium Designer",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "AD",
+        "Altium",
+        "PCB设计软件"
+      ]
+    },
+    {
+      "id": "10040136",
+      "dimension": "skills",
+      "value": "PCB设计",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "印制电路板设计",
+        "PCB Layout",
+        "电路板设计"
+      ]
+    },
+    {
+      "id": "10040137",
+      "dimension": "skills",
+      "value": "T/R组件",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "TR组件",
+        "收发组件",
+        "Transmit/Receive Module"
+      ]
+    },
+    {
+      "id": "10040138",
+      "dimension": "skills",
+      "value": "SiP封装",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "系统级封装",
+        "System in Package",
+        "SiP设计"
+      ]
+    },
+    {
+      "id": "10040139",
+      "dimension": "skills",
+      "value": "网络分析仪",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "矢量网络分析仪",
+        "VNA",
+        "网络分析测试"
+      ]
+    },
+    {
+      "id": "10040140",
+      "dimension": "skills",
+      "value": "频谱分析仪",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "Spectrum Analyzer",
+        "频谱仪",
+        "频域测试"
+      ]
+    },
+    {
+      "id": "10040141",
+      "dimension": "skills",
+      "value": "示波器",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "Oscilloscope",
+        "波形测试",
+        "示波器使用"
+      ]
+    },
+    {
+      "id": "10040142",
+      "dimension": "skills",
+      "value": "信号发生器",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "Signal Generator",
+        "射频信号源",
+        "信号源"
+      ]
+    },
+    {
+      "id": "10040143",
+      "dimension": "skills",
+      "value": "暗室测试",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "电波暗室",
+        "Anechoic Chamber",
+        "暗室测量"
+      ]
+    },
+    {
+      "id": "10040144",
+      "dimension": "skills",
+      "value": "EMC",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "电磁兼容",
+        "Electromagnetic Compatibility",
+        "电磁兼容测试"
+      ]
+    },
+    {
+      "id": "10040145",
+      "dimension": "skills",
+      "value": "卫星通信",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "Satcom",
+        "Satellite Communication",
+        "NTN",
+        "CCSDS",
+        "DVB-S2"
+      ]
+    },
+    {
+      "id": "10040146",
+      "dimension": "skills",
+      "value": "射频链路预算",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "RF Link Budget",
+        "链路预算",
+        "通信链路分析"
+      ]
+    },
+    {
+      "id": "10040147",
+      "dimension": "skills",
+      "value": "相控阵波束赋形",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "Beamforming",
+        "数字波束形成",
+        "阵列波束赋形"
+      ]
+    },
+    {
+      "id": "10040148",
+      "dimension": "skills",
+      "value": "射频校准",
+      "category": "电磁射频与通信",
+      "aliases": [
+        "RF Calibration",
+        "幅相校准",
+        "射频通道校准"
+      ]
+    },
+    {
+      "id": "10040149",
+      "dimension": "skills",
+      "value": "卫星总体设计",
+      "category": "航空航天与无人机",
+      "aliases": [
+        "卫星总体",
+        "整星总体设计",
+        "Spacecraft System Design"
+      ]
+    },
+    {
+      "id": "10040150",
+      "dimension": "skills",
+      "value": "卫星任务分析",
+      "category": "航空航天与无人机",
+      "aliases": [
+        "Mission Analysis",
+        "卫星任务规划",
+        "任务论证"
+      ]
+    },
+    {
+      "id": "10040151",
+      "dimension": "skills",
+      "value": "卫星需求分解",
+      "category": "航空航天与无人机",
+      "aliases": [
+        "系统需求分解",
+        "指标分配",
+        "需求分配"
+      ]
+    },
+    {
+      "id": "10040152",
+      "dimension": "skills",
+      "value": "卫星接口管理",
+      "category": "航空航天与无人机",
+      "aliases": [
+        "接口控制",
+        "ICD管理",
+        "分系统接口"
+      ]
+    },
+    {
+      "id": "10040153",
+      "dimension": "skills",
+      "value": "卫星集成测试",
+      "category": "航空航天与无人机",
+      "aliases": [
+        "整星集成测试",
+        "AIT",
+        "卫星测试",
+        "卫星发射"
+      ]
+    },
+    {
+      "id": "10040154",
+      "dimension": "skills",
+      "value": "STK",
+      "category": "航空航天与无人机",
+      "aliases": [
+        "Systems Tool Kit",
+        "卫星轨道仿真",
+        "航天任务仿真"
+      ]
+    },
+    {
+      "id": "10040155",
+      "dimension": "skills",
+      "value": "无人机总体设计",
+      "category": "航空航天与无人机",
+      "aliases": [
+        "UAV总体设计",
+        "无人机系统设计",
+        "飞行器总体"
+      ]
+    },
+    {
+      "id": "10040156",
+      "dimension": "skills",
+      "value": "无人机结构设计",
+      "category": "航空航天与无人机",
+      "aliases": [
+        "UAV结构",
+        "无人机机体设计",
+        "无人机结构工程"
+      ]
+    },
+    {
+      "id": "10040157",
+      "dimension": "skills",
+      "value": "无人机飞控",
+      "category": "航空航天与无人机",
+      "aliases": [
+        "UAV Flight Control",
+        "飞行控制系统",
+        "飞控算法"
+      ]
+    },
+    {
+      "id": "10040158",
+      "dimension": "skills",
+      "value": "无人机飞行力学",
+      "category": "航空航天与无人机",
+      "aliases": [
+        "UAV Flight Dynamics",
+        "飞行动力学",
+        "操稳分析"
+      ]
+    },
+    {
+      "id": "10040159",
+      "dimension": "skills",
+      "value": "无人机系统测试",
+      "category": "航空航天与无人机",
+      "aliases": [
+        "UAV系统测试",
+        "无人机综合测试",
+        "系统联试"
+      ]
+    },
+    {
+      "id": "10040160",
+      "dimension": "skills",
+      "value": "无人机试飞",
+      "category": "航空航天与无人机",
+      "aliases": [
+        "UAV Flight Test",
+        "试飞测试",
+        "飞行试验"
+      ]
+    },
+    {
+      "id": "10040161",
+      "dimension": "skills",
+      "value": "六自由度建模",
+      "category": "航空航天与无人机",
+      "aliases": [
+        "6DOF",
+        "六自由度动力学模型",
+        "飞行动力学建模"
+      ]
+    },
+    {
+      "id": "10040162",
+      "dimension": "skills",
+      "value": "SIL",
+      "category": "航空航天与无人机",
+      "aliases": [
+        "软件在环测试",
+        "Software-in-the-Loop",
+        "SIL仿真"
+      ]
+    },
+    {
+      "id": "10040163",
+      "dimension": "skills",
+      "value": "HIL",
+      "category": "航空航天与无人机",
+      "aliases": [
+        "硬件在环测试",
+        "Hardware-in-the-Loop",
+        "HIL仿真"
+      ]
+    },
+    {
+      "id": "10040164",
+      "dimension": "skills",
+      "value": "PX4",
+      "category": "航空航天与无人机",
+      "aliases": [
+        "PX4 Autopilot",
+        "PX4飞控",
+        "开源飞控"
+      ]
+    },
+    {
+      "id": "10040165",
+      "dimension": "skills",
+      "value": "ArduPilot",
+      "category": "航空航天与无人机",
+      "aliases": [
+        "ArduPilot飞控",
+        "APM",
+        "开源无人机飞控"
+      ]
+    },
+    {
+      "id": "10040166",
+      "dimension": "skills",
+      "value": "轨道设计",
+      "category": "航空航天与无人机",
+      "aliases": [
+        "Orbit Design",
+        "轨道分析",
+        "轨道优化"
+      ]
+    },
+    {
+      "id": "10040167",
+      "dimension": "skills",
+      "value": "导航制导与控制",
+      "category": "航空航天与无人机",
+      "aliases": [
+        "GNC",
+        "Guidance Navigation and Control",
+        "导航制导控制"
+      ]
+    },
+    {
+      "id": "10040168",
+      "dimension": "skills",
+      "value": "航空航天结构总体设计",
+      "category": "结构设计与工程仿真",
+      "aliases": [
+        "航空结构总体",
+        "Aerospace Structure",
+        "航空航天结构工程"
+      ]
+    },
+    {
+      "id": "10040169",
+      "dimension": "skills",
+      "value": "飞机结构详细设计",
+      "category": "结构设计与工程仿真",
+      "aliases": [
+        "Aircraft Detail Design",
+        "飞行器结构详细设计",
+        "飞机部件设计"
+      ]
+    },
+    {
+      "id": "10040170",
+      "dimension": "skills",
+      "value": "机身设计",
+      "category": "结构设计与工程仿真",
+      "aliases": [
+        "Fuselage Design",
+        "飞机机身",
+        "机体设计"
+      ]
+    },
+    {
+      "id": "10040171",
+      "dimension": "skills",
+      "value": "机翼设计",
+      "category": "结构设计与工程仿真",
+      "aliases": [
+        "Wing Design",
+        "飞机机翼",
+        "翼面设计"
+      ]
+    },
+    {
+      "id": "10040172",
+      "dimension": "skills",
+      "value": "结构强度分析",
+      "category": "结构设计与工程仿真",
+      "aliases": [
+        "Strength Analysis",
+        "结构校核",
+        "强度设计"
+      ]
+    },
+    {
+      "id": "10040173",
+      "dimension": "skills",
+      "value": "静强度分析",
+      "category": "结构设计与工程仿真",
+      "aliases": [
+        "Static Strength Analysis",
+        "静力强度",
+        "静载分析"
+      ]
+    },
+    {
+      "id": "10040174",
+      "dimension": "skills",
+      "value": "动强度分析",
+      "category": "结构设计与工程仿真",
+      "aliases": [
+        "Dynamic Strength Analysis",
+        "动态强度",
+        "动力学强度"
+      ]
+    },
+    {
+      "id": "10040175",
+      "dimension": "skills",
+      "value": "疲劳分析",
+      "category": "结构设计与工程仿真",
+      "aliases": [
+        "Fatigue Analysis",
+        "疲劳寿命",
+        "金属疲劳"
+      ]
+    },
+    {
+      "id": "10040176",
+      "dimension": "skills",
+      "value": "损伤容限",
+      "category": "结构设计与工程仿真",
+      "aliases": [
+        "Damage Tolerance",
+        "裂纹扩展",
+        "剩余强度"
+      ]
+    },
+    {
+      "id": "10040177",
+      "dimension": "skills",
+      "value": "鸟撞分析",
+      "category": "结构设计与工程仿真",
+      "aliases": [
+        "Bird Strike Analysis",
+        "鸟撞仿真",
+        "冲击分析"
+      ]
+    },
+    {
+      "id": "10040178",
+      "dimension": "skills",
+      "value": "有限元分析",
+      "category": "结构设计与工程仿真",
+      "aliases": [
+        "FEA",
+        "Finite Element Analysis",
+        "有限元仿真"
+      ]
+    },
+    {
+      "id": "10040179",
+      "dimension": "skills",
+      "value": "HyperMesh",
+      "category": "结构设计与工程仿真",
+      "aliases": [
+        "Altair HyperMesh",
+        "有限元前处理",
+        "网格划分"
+      ]
+    },
+    {
+      "id": "10040180",
+      "dimension": "skills",
+      "value": "Patran",
+      "category": "结构设计与工程仿真",
+      "aliases": [
+        "MSC Patran",
+        "有限元前后处理",
+        "Patran软件"
+      ]
+    },
+    {
+      "id": "10040181",
+      "dimension": "skills",
+      "value": "Nastran",
+      "category": "结构设计与工程仿真",
+      "aliases": [
+        "MSC Nastran",
+        "Nastran结构仿真",
+        "有限元求解"
+      ]
+    },
+    {
+      "id": "10040182",
+      "dimension": "skills",
+      "value": "ANSYS",
+      "category": "结构设计与工程仿真",
+      "aliases": [
+        "Ansys Mechanical",
+        "ANSYS有限元",
+        "结构仿真"
+      ]
+    },
+    {
+      "id": "10040183",
+      "dimension": "skills",
+      "value": "CATIA",
+      "category": "结构设计与工程仿真",
+      "aliases": [
+        "Dassault CATIA",
+        "CATIA三维设计",
+        "航空CAD"
+      ]
+    },
+    {
+      "id": "10040184",
+      "dimension": "skills",
+      "value": "UG/NX",
+      "category": "结构设计与工程仿真",
+      "aliases": [
+        "Siemens NX",
+        "UG",
+        "NX三维设计"
+      ]
+    },
+    {
+      "id": "10040185",
+      "dimension": "skills",
+      "value": "SolidWorks",
+      "category": "结构设计与工程仿真",
+      "aliases": [
+        "SOLIDWORKS",
+        "SW",
+        "三维机械设计"
+      ]
+    },
+    {
+      "id": "10040186",
+      "dimension": "skills",
+      "value": "AutoCAD",
+      "category": "结构设计与工程仿真",
+      "aliases": [
+        "CAD制图",
+        "二维制图",
+        "Auto CAD"
+      ]
+    },
+    {
+      "id": "10040187",
+      "dimension": "skills",
+      "value": "结构优化",
+      "category": "结构设计与工程仿真",
+      "aliases": [
+        "Structural Optimization",
+        "强度优化",
+        "轻量化设计"
+      ]
+    },
+    {
+      "id": "10040188",
+      "dimension": "skills",
+      "value": "复合材料结构设计",
+      "category": "结构设计与工程仿真",
+      "aliases": [
+        "Composite Structure Design",
+        "复材结构设计",
+        "复合材料构件设计"
+      ]
+    },
+    {
+      "id": "10040189",
+      "dimension": "skills",
+      "value": "CFD",
+      "category": "结构设计与工程仿真",
+      "aliases": [
+        "计算流体力学",
+        "Computational Fluid Dynamics",
+        "流体仿真"
+      ]
+    },
+    {
+      "id": "10040190",
+      "dimension": "skills",
+      "value": "Fluent",
+      "category": "结构设计与工程仿真",
+      "aliases": [
+        "Ansys Fluent",
+        "CFD仿真",
+        "流体分析"
+      ]
+    },
+    {
+      "id": "10040191",
+      "dimension": "skills",
+      "value": "STAR-CCM+",
+      "category": "结构设计与工程仿真",
+      "aliases": [
+        "Siemens STAR-CCM+",
+        "多物理场仿真",
+        "CFD软件"
+      ]
+    },
+    {
+      "id": "10040192",
+      "dimension": "skills",
+      "value": "Abaqus",
+      "category": "结构设计与工程仿真",
+      "aliases": [
+        "SIMULIA Abaqus",
+        "Abaqus有限元",
+        "非线性有限元"
+      ]
+    },
+    {
+      "id": "10040193",
+      "dimension": "skills",
+      "value": "LS-DYNA",
+      "category": "结构设计与工程仿真",
+      "aliases": [
+        "LS DYNA",
+        "显式动力学",
+        "冲击碰撞仿真"
+      ]
+    },
+    {
+      "id": "10040194",
+      "dimension": "skills",
+      "value": "模态分析",
+      "category": "结构设计与工程仿真",
+      "aliases": [
+        "Modal Analysis",
+        "固有频率分析",
+        "振型分析"
+      ]
+    },
+    {
+      "id": "10040195",
+      "dimension": "skills",
+      "value": "热分析",
+      "category": "结构设计与工程仿真",
+      "aliases": [
+        "Thermal Analysis",
+        "热仿真",
+        "温度场分析"
+      ]
+    },
+    {
+      "id": "10040196",
+      "dimension": "skills",
+      "value": "复合材料",
+      "category": "材料研发与复合材料",
+      "aliases": [
+        "Composite Materials",
+        "复材",
+        "纤维增强复合材料"
+      ]
+    },
+    {
+      "id": "10040197",
+      "dimension": "skills",
+      "value": "高分子材料",
+      "category": "材料研发与复合材料",
+      "aliases": [
+        "Polymer Materials",
+        "高分子",
+        "聚合物材料"
+      ]
+    },
+    {
+      "id": "10040198",
+      "dimension": "skills",
+      "value": "树脂合成",
+      "category": "材料研发与复合材料",
+      "aliases": [
+        "Resin Synthesis",
+        "高分子合成",
+        "树脂研发"
+      ]
+    },
+    {
+      "id": "10040199",
+      "dimension": "skills",
+      "value": "树脂改性",
+      "category": "材料研发与复合材料",
+      "aliases": [
+        "Resin Modification",
+        "增韧改性",
+        "耐热改性"
+      ]
+    },
+    {
+      "id": "10040200",
+      "dimension": "skills",
+      "value": "热固性树脂",
+      "category": "材料研发与复合材料",
+      "aliases": [
+        "Thermosetting Resin",
+        "热固树脂",
+        "热固性聚合物"
+      ]
+    },
+    {
+      "id": "10040201",
+      "dimension": "skills",
+      "value": "双马来酰亚胺树脂",
+      "category": "材料研发与复合材料",
+      "aliases": [
+        "双马树脂",
+        "BMI Resin",
+        "双马来酰亚胺"
+      ]
+    },
+    {
+      "id": "10040202",
+      "dimension": "skills",
+      "value": "环氧树脂",
+      "category": "材料研发与复合材料",
+      "aliases": [
+        "Epoxy Resin",
+        "环氧体系",
+        "环氧材料"
+      ]
+    },
+    {
+      "id": "10040203",
+      "dimension": "skills",
+      "value": "氰酸酯树脂",
+      "category": "材料研发与复合材料",
+      "aliases": [
+        "Cyanate Ester Resin",
+        "氰酸酯",
+        "CE树脂"
+      ]
+    },
+    {
+      "id": "10040204",
+      "dimension": "skills",
+      "value": "预浸料",
+      "category": "材料研发与复合材料",
+      "aliases": [
+        "Prepreg",
+        "复合材料预浸料",
+        "预浸带"
+      ]
+    },
+    {
+      "id": "10040205",
+      "dimension": "skills",
+      "value": "胶膜",
+      "category": "材料研发与复合材料",
+      "aliases": [
+        "Adhesive Film",
+        "胶膜材料",
+        "结构胶膜"
+      ]
+    },
+    {
+      "id": "10040206",
+      "dimension": "skills",
+      "value": "蜂窝材料",
+      "category": "材料研发与复合材料",
+      "aliases": [
+        "Honeycomb Material",
+        "蜂窝芯材",
+        "蜂窝结构"
+      ]
+    },
+    {
+      "id": "10040207",
+      "dimension": "skills",
+      "value": "吸波材料",
+      "category": "材料研发与复合材料",
+      "aliases": [
+        "Radar Absorbing Material",
+        "电磁吸波材料",
+        "隐身材料"
+      ]
+    },
+    {
+      "id": "10040208",
+      "dimension": "skills",
+      "value": "涂料研发",
+      "category": "材料研发与复合材料",
+      "aliases": [
+        "Coating Development",
+        "功能涂料",
+        "涂层研发"
+      ]
+    },
+    {
+      "id": "10040209",
+      "dimension": "skills",
+      "value": "材料配方",
+      "category": "材料研发与复合材料",
+      "aliases": [
+        "Formula Design",
+        "配方设计",
+        "树脂配方"
+      ]
+    },
+    {
+      "id": "10040210",
+      "dimension": "skills",
+      "value": "材料选型",
+      "category": "材料研发与复合材料",
+      "aliases": [
+        "Material Selection",
+        "原材料选型",
+        "材料选择"
+      ]
+    },
+    {
+      "id": "10040211",
+      "dimension": "skills",
+      "value": "材料表征",
+      "category": "材料研发与复合材料",
+      "aliases": [
+        "Material Characterization",
+        "材料分析",
+        "性能表征"
+      ]
+    },
+    {
+      "id": "10040212",
+      "dimension": "skills",
+      "value": "材料性能测试",
+      "category": "材料研发与复合材料",
+      "aliases": [
+        "力学性能测试",
+        "热性能测试",
+        "电磁性能测试"
+      ]
+    },
+    {
+      "id": "10040213",
+      "dimension": "skills",
+      "value": "固化工艺",
+      "category": "材料研发与复合材料",
+      "aliases": [
+        "Curing Process",
+        "复材固化",
+        "树脂固化"
+      ]
+    },
+    {
+      "id": "10040214",
+      "dimension": "skills",
+      "value": "复合材料成型",
+      "category": "材料研发与复合材料",
+      "aliases": [
+        "复材成型",
+        "Molding Process",
+        "成型工艺"
+      ]
+    },
+    {
+      "id": "10040215",
+      "dimension": "skills",
+      "value": "复合材料制造工艺",
+      "category": "材料研发与复合材料",
+      "aliases": [
+        "Composite Manufacturing Process",
+        "复材制造",
+        "复材工艺"
+      ]
+    },
+    {
+      "id": "10040216",
+      "dimension": "skills",
+      "value": "机械加工",
+      "category": "制造工艺与自动化",
+      "aliases": [
+        "Machining",
+        "机加工",
+        "车铣磨加工"
+      ]
+    },
+    {
+      "id": "10040217",
+      "dimension": "skills",
+      "value": "CNC",
+      "category": "制造工艺与自动化",
+      "aliases": [
+        "数控加工",
+        "Computer Numerical Control",
+        "数控机床"
+      ]
+    },
+    {
+      "id": "10040218",
+      "dimension": "skills",
+      "value": "CNC编程",
+      "category": "制造工艺与自动化",
+      "aliases": [
+        "数控编程",
+        "CNC Programming",
+        "加工程序编制"
+      ]
+    },
+    {
+      "id": "10040219",
+      "dimension": "skills",
+      "value": "三轴加工",
+      "category": "制造工艺与自动化",
+      "aliases": [
+        "3轴加工",
+        "三轴编程",
+        "Three-axis Machining"
+      ]
+    },
+    {
+      "id": "10040220",
+      "dimension": "skills",
+      "value": "五轴加工",
+      "category": "制造工艺与自动化",
+      "aliases": [
+        "5轴加工",
+        "五轴编程",
+        "Five-axis Machining"
+      ]
+    },
+    {
+      "id": "10040221",
+      "dimension": "skills",
+      "value": "工装设计",
+      "category": "制造工艺与自动化",
+      "aliases": [
+        "Tooling Design",
+        "制造工装",
+        "试验工装"
+      ]
+    },
+    {
+      "id": "10040222",
+      "dimension": "skills",
+      "value": "夹具设计",
+      "category": "制造工艺与自动化",
+      "aliases": [
+        "Fixture Design",
+        "定位夹具",
+        "工装夹具"
+      ]
+    },
+    {
+      "id": "10040223",
+      "dimension": "skills",
+      "value": "机械装配",
+      "category": "制造工艺与自动化",
+      "aliases": [
+        "Mechanical Assembly",
+        "组装",
+        "设备装配"
+      ]
+    },
+    {
+      "id": "10040224",
+      "dimension": "skills",
+      "value": "零件装夹",
+      "category": "制造工艺与自动化",
+      "aliases": [
+        "工件装夹",
+        "Part Fixturing",
+        "装夹定位"
+      ]
+    },
+    {
+      "id": "10040225",
+      "dimension": "skills",
+      "value": "涂装工艺",
+      "category": "制造工艺与自动化",
+      "aliases": [
+        "Coating Process",
+        "喷涂工艺",
+        "表面涂装"
+      ]
+    },
+    {
+      "id": "10040226",
+      "dimension": "skills",
+      "value": "切割",
+      "category": "制造工艺与自动化",
+      "aliases": [
+        "Cutting",
+        "材料切割",
+        "产品切割"
+      ]
+    },
+    {
+      "id": "10040227",
+      "dimension": "skills",
+      "value": "打磨",
+      "category": "制造工艺与自动化",
+      "aliases": [
+        "Grinding",
+        "气动打磨",
+        "表面处理"
+      ]
+    },
+    {
+      "id": "10040228",
+      "dimension": "skills",
+      "value": "焊接",
+      "category": "制造工艺与自动化",
+      "aliases": [
+        "Soldering",
+        "电子焊接",
+        "焊接作业"
+      ]
+    },
+    {
+      "id": "10040229",
+      "dimension": "skills",
+      "value": "电子装配",
+      "category": "制造工艺与自动化",
+      "aliases": [
+        "Electronic Assembly",
+        "电装",
+        "电子产品组装"
+      ]
+    },
+    {
+      "id": "10040230",
+      "dimension": "skills",
+      "value": "设备安装调试",
+      "category": "制造工艺与自动化",
+      "aliases": [
+        "Equipment Commissioning",
+        "设备安装",
+        "设备调试"
+      ]
+    },
+    {
+      "id": "10040231",
+      "dimension": "skills",
+      "value": "设备维护",
+      "category": "制造工艺与自动化",
+      "aliases": [
+        "Equipment Maintenance",
+        "设备维修",
+        "预防性维护",
+        "设备保养"
+      ]
+    },
+    {
+      "id": "10040232",
+      "dimension": "skills",
+      "value": "PLC",
+      "category": "制造工艺与自动化",
+      "aliases": [
+        "PLC编程",
+        "可编程逻辑控制器",
+        "PLC控制"
+      ]
+    },
+    {
+      "id": "10040233",
+      "dimension": "skills",
+      "value": "工业机器人",
+      "category": "制造工艺与自动化",
+      "aliases": [
+        "Industrial Robot",
+        "机器人编程",
+        "机器人调试",
+        "ABB",
+        "FANUC",
+        "KUKA",
+        "安川"
+      ]
+    },
+    {
+      "id": "10040234",
+      "dimension": "skills",
+      "value": "RobotStudio",
+      "category": "制造工艺与自动化",
+      "aliases": [
+        "ABB RobotStudio",
+        "ABB机器人离线编程",
+        "ABB仿真"
+      ]
+    },
+    {
+      "id": "10040235",
+      "dimension": "skills",
+      "value": "RoboGuide",
+      "category": "制造工艺与自动化",
+      "aliases": [
+        "FANUC RoboGuide",
+        "发那科仿真",
+        "FANUC机器人离线编程"
+      ]
+    },
+    {
+      "id": "10040236",
+      "dimension": "skills",
+      "value": "ROS",
+      "category": "制造工艺与自动化",
+      "aliases": [
+        "Robot Operating System",
+        "机器人操作系统",
+        "ROS开发"
+      ]
+    },
+    {
+      "id": "10040237",
+      "dimension": "skills",
+      "value": "ROS2",
+      "category": "制造工艺与自动化",
+      "aliases": [
+        "Robot Operating System 2",
+        "ROS 2",
+        "机器人中间件"
+      ]
+    },
+    {
+      "id": "10040238",
+      "dimension": "skills",
+      "value": "Gazebo",
+      "category": "制造工艺与自动化",
+      "aliases": [
+        "Gazebo仿真",
+        "机器人仿真平台",
+        "ROS/Gazebo"
+      ]
+    },
+    {
+      "id": "10040239",
+      "dimension": "skills",
+      "value": "SLAM",
+      "category": "制造工艺与自动化",
+      "aliases": [
+        "同步定位与建图",
+        "Simultaneous Localization and Mapping"
+      ]
+    },
+    {
+      "id": "10040240",
+      "dimension": "skills",
+      "value": "Profinet",
+      "category": "制造工艺与自动化",
+      "aliases": [
+        "PROFINET",
+        "工业以太网",
+        "西门子工业通信"
+      ]
+    },
+    {
+      "id": "10040241",
+      "dimension": "skills",
+      "value": "EtherCAT",
+      "category": "制造工艺与自动化",
+      "aliases": [
+        "EtherCAT总线",
+        "工业实时以太网",
+        "运动控制通信"
+      ]
+    },
+    {
+      "id": "10040242",
+      "dimension": "skills",
+      "value": "Modbus TCP",
+      "category": "制造工艺与自动化",
+      "aliases": [
+        "ModbusTCP",
+        "工业通信协议",
+        "Modbus以太网"
+      ]
+    },
+    {
+      "id": "10040243",
+      "dimension": "skills",
+      "value": "AGV/AMR",
+      "category": "制造工艺与自动化",
+      "aliases": [
+        "AGV",
+        "AMR",
+        "自动导引车",
+        "自主移动机器人"
+      ]
+    },
+    {
+      "id": "10040244",
+      "dimension": "skills",
+      "value": "机器视觉",
+      "category": "制造工艺与自动化",
+      "aliases": [
+        "Machine Vision",
+        "视觉系统",
+        "视觉检测",
+        "视觉引导"
+      ]
+    },
+    {
+      "id": "10040245",
+      "dimension": "skills",
+      "value": "自动化产线",
+      "category": "制造工艺与自动化",
+      "aliases": [
+        "自动化设备集成",
+        "机器人工作站",
+        "智能装备",
+        "产线集成"
+      ]
+    },
+    {
+      "id": "10040246",
+      "dimension": "skills",
+      "value": "测试方案",
+      "category": "测试质量与可靠性",
+      "aliases": [
+        "Test Plan",
+        "测试大纲",
+        "试验方案"
+      ]
+    },
+    {
+      "id": "10040247",
+      "dimension": "skills",
+      "value": "测试SOP",
+      "category": "测试质量与可靠性",
+      "aliases": [
+        "测试标准",
+        "作业指导书",
+        "测试规范"
+      ]
+    },
+    {
+      "id": "10040248",
+      "dimension": "skills",
+      "value": "测试系统搭建",
+      "category": "测试质量与可靠性",
+      "aliases": [
+        "测试平台搭建",
+        "测试设备集成",
+        "测试环境"
+      ]
+    },
+    {
+      "id": "10040249",
+      "dimension": "skills",
+      "value": "无损检测",
+      "category": "测试质量与可靠性",
+      "aliases": [
+        "NDT",
+        "Non-Destructive Testing",
+        "无损检验"
+      ]
+    },
+    {
+      "id": "10040250",
+      "dimension": "skills",
+      "value": "超声检测",
+      "category": "测试质量与可靠性",
+      "aliases": [
+        "UT",
+        "Ultrasonic Testing",
+        "超声波探伤"
+      ]
+    },
+    {
+      "id": "10040251",
+      "dimension": "skills",
+      "value": "可靠性设计",
+      "category": "测试质量与可靠性",
+      "aliases": [
+        "Reliability Design",
+        "可靠性工程",
+        "可靠性策划"
+      ]
+    },
+    {
+      "id": "10040252",
+      "dimension": "skills",
+      "value": "FMEA",
+      "category": "测试质量与可靠性",
+      "aliases": [
+        "故障模式与影响分析",
+        "Failure Mode and Effects Analysis"
+      ]
+    },
+    {
+      "id": "10040253",
+      "dimension": "skills",
+      "value": "FTA",
+      "category": "测试质量与可靠性",
+      "aliases": [
+        "故障树分析",
+        "Fault Tree Analysis",
+        "可靠性分析"
+      ]
+    },
+    {
+      "id": "10040254",
+      "dimension": "skills",
+      "value": "MTBF",
+      "category": "测试质量与可靠性",
+      "aliases": [
+        "平均无故障时间",
+        "Mean Time Between Failures",
+        "可靠性指标"
+      ]
+    },
+    {
+      "id": "10040255",
+      "dimension": "skills",
+      "value": "FRACAS",
+      "category": "测试质量与可靠性",
+      "aliases": [
+        "故障报告分析与纠正措施系统",
+        "故障闭环"
+      ]
+    },
+    {
+      "id": "10040256",
+      "dimension": "skills",
+      "value": "环境可靠性试验",
+      "category": "测试质量与可靠性",
+      "aliases": [
+        "环境试验",
+        "盐雾试验",
+        "霉菌试验",
+        "高低温试验"
+      ]
+    },
+    {
+      "id": "10040257",
+      "dimension": "skills",
+      "value": "振动试验",
+      "category": "测试质量与可靠性",
+      "aliases": [
+        "Vibration Test",
+        "机械环境试验",
+        "振动测试"
+      ]
+    },
+    {
+      "id": "10040258",
+      "dimension": "skills",
+      "value": "温湿度试验",
+      "category": "测试质量与可靠性",
+      "aliases": [
+        "温度试验",
+        "湿热试验",
+        "Temperature and Humidity Test"
+      ]
+    },
+    {
+      "id": "10040259",
+      "dimension": "skills",
+      "value": "失效分析",
+      "category": "测试质量与可靠性",
+      "aliases": [
+        "Failure Analysis",
+        "故障物理分析",
+        "失效模式"
+      ]
+    },
+    {
+      "id": "10040260",
+      "dimension": "skills",
+      "value": "根因分析",
+      "category": "测试质量与可靠性",
+      "aliases": [
+        "Root Cause Analysis",
+        "RCA",
+        "问题根因"
+      ]
+    },
+    {
+      "id": "10040261",
+      "dimension": "skills",
+      "value": "GJB质量体系",
+      "category": "测试质量与可靠性",
+      "aliases": [
+        "国军标质量体系",
+        "军工质量体系",
+        "GJB"
+      ]
+    },
+    {
+      "id": "10040262",
+      "dimension": "skills",
+      "value": "CNAS",
+      "category": "测试质量与可靠性",
+      "aliases": [
+        "中国合格评定国家认可委员会",
+        "实验室认可"
+      ]
+    },
+    {
+      "id": "10040263",
+      "dimension": "skills",
+      "value": "质量检验",
+      "category": "测试质量与可靠性",
+      "aliases": [
+        "产品检验",
+        "成品检验",
+        "出厂检验"
+      ]
+    },
+    {
+      "id": "10040264",
+      "dimension": "skills",
+      "value": "不合格品管理",
+      "category": "测试质量与可靠性",
+      "aliases": [
+        "NCR管理",
+        "不合格品审理",
+        "超差单"
+      ]
+    },
+    {
+      "id": "10040265",
+      "dimension": "skills",
+      "value": "质量问题归零",
+      "category": "测试质量与可靠性",
+      "aliases": [
+        "质量问题闭环",
+        "双五归零",
+        "整改闭环"
+      ]
+    },
+    {
+      "id": "10040266",
+      "dimension": "skills",
+      "value": "8D问题解决",
+      "category": "测试质量与可靠性",
+      "aliases": [
+        "8D",
+        "Eight Disciplines",
+        "8D报告",
+        "质量问题解决"
+      ]
+    },
+    {
+      "id": "10040267",
+      "dimension": "skills",
+      "value": "SPC",
+      "category": "测试质量与可靠性",
+      "aliases": [
+        "统计过程控制",
+        "Statistical Process Control",
+        "过程能力分析"
+      ]
+    },
+    {
+      "id": "10040268",
+      "dimension": "skills",
+      "value": "MSA",
+      "category": "测试质量与可靠性",
+      "aliases": [
+        "测量系统分析",
+        "Measurement System Analysis",
+        "量具分析"
+      ]
+    },
+    {
+      "id": "10040269",
+      "dimension": "skills",
+      "value": "ISO 9001",
+      "category": "测试质量与可靠性",
+      "aliases": [
+        "ISO9001",
+        "质量管理体系",
+        "QMS"
+      ]
+    },
+    {
+      "id": "10040270",
+      "dimension": "skills",
+      "value": "PMC",
+      "category": "生产供应链与项目管理",
+      "aliases": [
+        "生产计划与物料控制",
+        "Production and Material Control"
+      ]
+    },
+    {
+      "id": "10040271",
+      "dimension": "skills",
+      "value": "生产计划",
+      "category": "生产供应链与项目管理",
+      "aliases": [
+        "Production Planning",
+        "周计划",
+        "日计划"
+      ]
+    },
+    {
+      "id": "10040272",
+      "dimension": "skills",
+      "value": "生产排程",
+      "category": "生产供应链与项目管理",
+      "aliases": [
+        "Production Scheduling",
+        "排产计划",
+        "计划调度"
+      ]
+    },
+    {
+      "id": "10040273",
+      "dimension": "skills",
+      "value": "物料需求计划",
+      "category": "生产供应链与项目管理",
+      "aliases": [
+        "MRP",
+        "物料计划",
+        "采购需求"
+      ]
+    },
+    {
+      "id": "10040274",
+      "dimension": "skills",
+      "value": "库存管理",
+      "category": "生产供应链与项目管理",
+      "aliases": [
+        "安全库存",
+        "库存控制",
+        "Inventory Management"
+      ]
+    },
+    {
+      "id": "10040275",
+      "dimension": "skills",
+      "value": "物流管理",
+      "category": "生产供应链与项目管理",
+      "aliases": [
+        "厂内物流",
+        "物料搬运",
+        "物流装卸"
+      ]
+    },
+    {
+      "id": "10040276",
+      "dimension": "skills",
+      "value": "叉车作业",
+      "category": "生产供应链与项目管理",
+      "aliases": [
+        "叉车操作",
+        "Forklift Operation",
+        "N1叉车证"
+      ]
+    },
+    {
+      "id": "10040277",
+      "dimension": "skills",
+      "value": "项目管理",
+      "category": "生产供应链与项目管理",
+      "aliases": [
+        "Project Management",
+        "项目计划",
+        "项目进度管理"
+      ]
+    },
+    {
+      "id": "10040278",
+      "dimension": "skills",
+      "value": "供应商管理",
+      "category": "生产供应链与项目管理",
+      "aliases": [
+        "Supplier Management",
+        "外包单位管理",
+        "供应商评估"
+      ]
+    },
+    {
+      "id": "10040279",
+      "dimension": "skills",
+      "value": "工厂运营",
+      "category": "生产供应链与项目管理",
+      "aliases": [
+        "Factory Operations",
+        "生产运营",
+        "海外工厂运营"
+      ]
+    },
+    {
+      "id": "10040280",
+      "dimension": "skills",
+      "value": "采购管理",
+      "category": "生产供应链与项目管理",
+      "aliases": [
+        "Procurement Management",
+        "采购计划",
+        "采购执行"
+      ]
+    },
+    {
+      "id": "10040281",
+      "dimension": "skills",
+      "value": "成本控制",
+      "category": "生产供应链与项目管理",
+      "aliases": [
+        "Cost Control",
+        "成本分析",
+        "降本管理"
+      ]
+    },
+    {
+      "id": "10040282",
+      "dimension": "skills",
+      "value": "产品管理",
+      "category": "市场销售与产品",
+      "aliases": [
+        "Product Management",
+        "产品规划",
+        "产品路线图"
+      ]
+    },
+    {
+      "id": "10040283",
+      "dimension": "skills",
+      "value": "需求分析",
+      "category": "市场销售与产品",
+      "aliases": [
+        "客户需求分析",
+        "用户需求",
+        "需求调研"
+      ]
+    },
+    {
+      "id": "10040284",
+      "dimension": "skills",
+      "value": "市场运营",
+      "category": "市场销售与产品",
+      "aliases": [
+        "Marketing Operations",
+        "销售运营",
+        "市场活动运营"
+      ]
+    },
+    {
+      "id": "10040285",
+      "dimension": "skills",
+      "value": "销售工具包",
+      "category": "市场销售与产品",
+      "aliases": [
+        "Sales Enablement",
+        "产品手册",
+        "案例集",
+        "竞品对比"
+      ]
+    },
+    {
+      "id": "10040286",
+      "dimension": "skills",
+      "value": "商务拓展",
+      "category": "市场销售与产品",
+      "aliases": [
+        "Business Development",
+        "客户开发",
+        "销售拓展"
+      ]
+    },
+    {
+      "id": "10040287",
+      "dimension": "skills",
+      "value": "商务谈判",
+      "category": "市场销售与产品",
+      "aliases": [
+        "Business Negotiation",
+        "企业商务谈判",
+        "合同商务谈判"
+      ]
+    },
+    {
+      "id": "10040288",
+      "dimension": "skills",
+      "value": "大客户管理",
+      "category": "市场销售与产品",
+      "aliases": [
+        "Key Account Management",
+        "大客户维护",
+        "客户关系"
+      ]
+    },
+    {
+      "id": "10040289",
+      "dimension": "skills",
+      "value": "行政管理",
+      "category": "职能与物业",
+      "aliases": [
+        "Administration",
+        "后勤管理",
+        "资产管理",
+        "档案管理"
+      ]
+    },
+    {
+      "id": "10040290",
+      "dimension": "skills",
+      "value": "人力资源管理",
+      "category": "职能与物业",
+      "aliases": [
+        "Human Resources",
+        "人事管理",
+        "员工关系",
+        "绩效管理"
+      ]
+    },
+    {
+      "id": "10040291",
+      "dimension": "skills",
+      "value": "招聘管理",
+      "category": "职能与物业",
+      "aliases": [
+        "Recruitment",
+        "人才招聘",
+        "招聘运营"
+      ]
+    },
+    {
+      "id": "10040292",
+      "dimension": "skills",
+      "value": "法务",
+      "category": "职能与物业",
+      "aliases": [
+        "Legal Affairs",
+        "合同审核",
+        "法律事务"
+      ]
+    },
+    {
+      "id": "10040293",
+      "dimension": "skills",
+      "value": "合规管理",
+      "category": "职能与物业",
+      "aliases": [
+        "Compliance",
+        "法律风险",
+        "合规审查"
+      ]
+    },
+    {
+      "id": "10040294",
+      "dimension": "skills",
+      "value": "信息披露",
+      "category": "职能与物业",
+      "aliases": [
+        "证券事务",
+        "上市公司信息披露",
+        "投资者关系"
+      ]
+    },
+    {
+      "id": "10040295",
+      "dimension": "skills",
+      "value": "招商管理",
+      "category": "职能与物业",
+      "aliases": [
+        "写字楼招商",
+        "租赁管理",
+        "商业地产招商谈判"
+      ]
+    },
+    {
+      "id": "10040296",
+      "dimension": "skills",
+      "value": "物业客服",
+      "category": "职能与物业",
+      "aliases": [
+        "物业客户服务",
+        "投诉处理",
+        "收费管理",
+        "入驻管理"
+      ]
+    },
+    {
+      "id": "10040297",
+      "dimension": "skills",
+      "value": "物业机电",
+      "category": "职能与物业",
+      "aliases": [
+        "物业工程管理",
+        "机电运维",
+        "强电运维",
+        "弱电运维"
+      ]
+    },
+    {
+      "id": "10040298",
+      "dimension": "skills",
+      "value": "楼宇自控BA",
+      "category": "职能与物业",
+      "aliases": [
+        "Building Automation",
+        "BA系统",
+        "楼宇自动化"
+      ]
+    },
+    {
+      "id": "10040299",
+      "dimension": "skills",
+      "value": "安保消防管理",
+      "category": "职能与物业",
+      "aliases": [
+        "安全管理",
+        "消防管理",
+        "治安管理",
+        "应急处置"
+      ]
+    },
+    {
+      "id": "10040300",
+      "dimension": "skills",
+      "value": "环境保洁管理",
+      "category": "职能与物业",
+      "aliases": [
+        "环境管理",
+        "保洁管理",
+        "消杀",
+        "垃圾分类"
+      ]
+    },
+    {
+      "id": "10050001",
+      "dimension": "industry",
+      "value": "互联网/电商",
+      "aliases": [
+        "互联网",
+        "电子商务"
+      ]
+    },
+    {
+      "id": "10050002",
+      "dimension": "industry",
+      "value": "金融/银行/证券/保险",
+      "aliases": [
+        "金融科技",
+        "金融行业",
+        "FinTech"
+      ]
+    },
+    {
+      "id": "10050003",
+      "dimension": "industry",
+      "value": "企业服务/SaaS",
+      "aliases": [
+        "企业服务",
+        "SaaS"
+      ]
+    },
+    {
+      "id": "10050004",
+      "dimension": "industry",
+      "value": "游戏/传媒/文娱",
+      "aliases": [
+        "游戏",
+        "传媒文娱",
+        "游戏行业"
+      ]
+    },
+    {
+      "id": "10050005",
+      "dimension": "industry",
+      "value": "教育/培训",
+      "aliases": [
+        "在线教育",
+        "教育培训",
+        "教育科技"
+      ]
+    },
+    {
+      "id": "10050006",
+      "dimension": "industry",
+      "value": "医疗健康/生物医药",
+      "aliases": [
+        "医疗",
+        "大健康",
+        "生物医药"
+      ]
+    },
+    {
+      "id": "10050007",
+      "dimension": "industry",
+      "value": "人工智能/数据智能",
+      "aliases": [
+        "人工智能",
+        "数据智能",
+        "AI行业"
+      ]
+    },
+    {
+      "id": "10050008",
+      "dimension": "industry",
+      "value": "汽车/出行",
+      "aliases": [
+        "汽车",
+        "出行"
+      ]
+    },
+    {
+      "id": "10050009",
+      "dimension": "industry",
+      "value": "半导体/集成电路",
+      "aliases": [
+        "半导体",
+        "集成电路",
+        "芯片行业"
+      ]
+    },
+    {
+      "id": "10050010",
+      "dimension": "industry",
+      "value": "通信/物联网/智能硬件",
+      "aliases": [
+        "物联网/硬件",
+        "通信行业",
+        "物联网",
+        "智能硬件"
+      ]
+    },
+    {
+      "id": "10050011",
+      "dimension": "industry",
+      "value": "物流/供应链",
+      "aliases": [
+        "物流",
+        "供应链"
+      ]
+    },
+    {
+      "id": "10050012",
+      "dimension": "industry",
+      "value": "航空航天/国防科技",
+      "aliases": [
+        "航空航天",
+        "军工",
+        "国防科技"
+      ]
+    },
+    {
+      "id": "10050013",
+      "dimension": "industry",
+      "value": "制造业/工业自动化/新材料",
+      "aliases": [
+        "先进制造/新材料",
+        "先进制造",
+        "智能制造",
+        "新材料"
+      ]
+    },
+    {
+      "id": "10050014",
+      "dimension": "industry",
+      "value": "能源/电力/新能源",
+      "aliases": [
+        "能源电力",
+        "新能源行业"
+      ]
+    },
+    {
+      "id": "10050015",
+      "dimension": "industry",
+      "value": "消费品/零售",
+      "aliases": [
+        "消费零售",
+        "快消零售"
+      ]
+    },
+    {
+      "id": "10050016",
+      "dimension": "industry",
+      "value": "房地产/建筑/物业",
+      "aliases": [
+        "房地产建筑",
+        "建筑物业"
+      ]
+    },
+    {
+      "id": "20010001",
+      "dimension": "jobstable",
+      "ruleKey": "frequent_job_change",
+      "value": "频繁跳槽",
+      "aliases": []
+    },
+    {
+      "id": "20010002",
+      "dimension": "jobstable",
+      "ruleKey": "short_tenure",
+      "value": "最近任职时长偏短",
+      "aliases": []
+    },
+    {
+      "id": "20010003",
+      "dimension": "jobstable",
+      "ruleKey": "gap_period",
+      "value": "工作空窗期过长",
+      "aliases": []
+    },
+    {
+      "id": "20020001",
+      "dimension": "integrity",
+      "ruleKey": "timeline_overlap",
+      "value": "工作时间线重叠",
+      "aliases": []
+    },
+    {
+      "id": "20030001",
+      "dimension": "matchRisk",
+      "ruleKey": "training_institution",
+      "value": "疑似培训机构背景",
+      "aliases": []
+    },
+    {
+      "id": "20040001",
+      "dimension": "location",
+      "ruleKey": "sensitive_words",
+      "value": "敏感地域",
+      "aliases": []
+    }
+  ]
+}

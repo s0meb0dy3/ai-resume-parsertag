@@ -20,12 +20,32 @@ from config import PDF_DPI
 
 
 def pil_to_base64(img: Image.Image) -> str:
+    """将 PIL 图像编码为 OpenAI 多模态消息使用的 PNG data URI。
+
+    Args:
+        img (Image.Image): 已渲染的 PDF 页面图像。
+
+    Returns:
+        str: `data:image/png;base64,` 前缀的 base64 图像字符串。
+    """
     buf = io.BytesIO()
     img.save(buf, format="PNG")
     return "data:image/png;base64," + base64.b64encode(buf.getvalue()).decode()
 
 
 def _open_pdf(source) -> fitz.Document:
+    """从字节或本地路径打开未加密 PDF。
+
+    Args:
+        source (bytes | str | Path): PDF 字节或 PyMuPDF 支持的本地路径。
+
+    Returns:
+        fitz.Document: 由调用方关闭的 PDF 文档句柄。
+
+    Raises:
+        ValueError: PDF 需要密码时抛出。
+        fitz.FileDataError: 输入不是可解析 PDF 时抛出。
+    """
     doc = fitz.open(stream=source, filetype="pdf") if isinstance(source, bytes) else fitz.open(source)
     if doc.needs_pass:
         doc.close()
@@ -34,7 +54,21 @@ def _open_pdf(source) -> fitz.Document:
 
 
 def _render_pages(source) -> list[tuple[int, Image.Image]]:
-    """公共渲染基函数：PDF → [(page_idx, PIL Image)]，pdf_to_images / pdf_to_batches 共用。"""
+    """以 `PDF_DPI` 渲染 PDF 的全部页面并保留原始页索引。
+
+    Args:
+        source (bytes | str | Path): PDF 字节或本地路径。
+
+    Returns:
+        list[tuple[int, Image.Image]]: 从 0 开始的页索引和独立 PIL 图像。
+
+    Raises:
+        ValueError: PDF 已加密时抛出。
+        fitz.FileDataError: PDF 无法打开或渲染时抛出。
+
+    Note:
+        所有页面会在返回前一次性渲染到内存。
+    """
     doc = _open_pdf(source)
     try:
         # PDF 坐标系以 72 DPI（1点 = 1/72英寸）为基准；zoom 换算为目标分辨率
@@ -51,7 +85,14 @@ def _render_pages(source) -> list[tuple[int, Image.Image]]:
 
 
 def get_page_count(source) -> int:
-    """仅探页数，不渲染图像；用于 parser.run 决策单批/分批路径，避免无效全量渲染。"""
+    """读取 PDF 页数而不渲染图像。
+
+    Args:
+        source (bytes | str | Path): PDF 字节或本地路径。
+
+    Returns:
+        int: PDF 总页数，用于选择单批或分批推理路径。
+    """
     doc = _open_pdf(source)
     try:
         return doc.page_count
@@ -60,15 +101,40 @@ def get_page_count(source) -> int:
 
 
 def pdf_to_images(source) -> list[Image.Image]:
+    """将 PDF 全部页面转换为按页序排列的 PIL 图像。
+
+    Args:
+        source (bytes | str | Path): PDF 字节或本地路径。
+
+    Returns:
+        list[Image.Image]: 不包含页索引的页面图像列表。
+    """
     return [img for _, img in _render_pages(source)]
 
 
 def pdf_to_batches(source, batch_size: int = 1) -> list[list[tuple[int, Image.Image]]]:
+    """渲染 PDF 全部页面并按固定页数切分批次。
+
+    Args:
+        source (bytes | str | Path): PDF 字节或本地路径。
+        batch_size (int): 每个批次的最大页数。
+
+    Returns:
+        list[list[tuple[int, Image.Image]]]: 保留原始页索引的批次列表。
+    """
     pages = _render_pages(source)
     return [pages[i:i + batch_size] for i in range(0, len(pages), batch_size)]
 
 
 def smart_batch_size(page_count: int) -> int:
+    """根据 PDF 总页数选择长文档推理的每批页数。
+
+    Args:
+        page_count (int): PDF 总页数。
+
+    Returns:
+        int: 1–2 页时返回原页数，3–6 页返回 2，更长文档返回 1。
+    """
     if page_count <= 2:
         return page_count
     elif page_count <= 6:

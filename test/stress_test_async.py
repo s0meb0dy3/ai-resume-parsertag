@@ -24,6 +24,19 @@ STATUS_DESC = {0: "待处理", 1: "解析中", 2: "打标中", 3: "完成", 4: "
 
 
 async def submit_one(session: aiohttp.ClientSession, file_path: Path, idx: int) -> str:
+    """向异步解析接口提交一份 PDF。
+
+    Args:
+        session: 复用连接池的 HTTP 会话。
+        file_path: 待提交的 PDF 路径。
+        idx: 用于压测日志定位的任务序号。
+
+    Returns:
+        服务端生成的任务标识。
+
+    Raises:
+        RuntimeError: 业务响应码表示提交失败。
+    """
     with open(file_path, "rb") as f:
         data = aiohttp.FormData()
         data.add_field("file", f, filename=file_path.name, content_type="application/pdf")
@@ -39,6 +52,18 @@ async def submit_one(session: aiohttp.ClientSession, file_path: Path, idx: int) 
 
 async def poll_one(session: aiohttp.ClientSession, task_id: str, idx: int,
                    submit_ts: float, timeout: int = 300) -> dict:
+    """轮询单个异步任务直至终态或超时。
+
+    Args:
+        session: 复用连接池的 HTTP 会话。
+        task_id: 服务端任务标识。
+        idx: 用于压测日志定位的任务序号。
+        submit_ts: 任务提交前的 Unix 时间戳。
+        timeout: 最大轮询时长，单位为秒。
+
+    Returns:
+        包含成功标志、耗时以及结果或错误信息的汇总字典。
+    """
     start      = time.time()
     last_status = -1
     while time.time() - start < timeout:
@@ -67,6 +92,17 @@ async def poll_one(session: aiohttp.ClientSession, task_id: str, idx: int,
 
 async def run_one(session: aiohttp.ClientSession, file_path: Path,
                   idx: int, submit_ts: float) -> dict:
+    """执行一份简历的提交和轮询，并把异常转为失败结果。
+
+    Args:
+        session: 复用连接池的 HTTP 会话。
+        file_path: 待提交的 PDF 路径。
+        idx: 用于压测日志定位的任务序号。
+        submit_ts: 整批压测开始时的 Unix 时间戳。
+
+    Returns:
+        可直接参与批量统计的任务结果字典。
+    """
     try:
         task_id = await submit_one(session, file_path, idx)
         return await poll_one(session, task_id, idx, submit_ts)
@@ -75,6 +111,15 @@ async def run_one(session: aiohttp.ClientSession, file_path: Path,
 
 
 async def main_async(files: list[Path], concurrency: int):
+    """并发执行压测并将统计结果写入本地文件。
+
+    Args:
+        files: 按提交顺序排列的 PDF 路径列表。
+        concurrency: 同时运行的任务上限。
+
+    Note:
+        本函数会创建结果和日志目录，并写入 JSON 汇总及文本日志。
+    """
     RESULT_DIR.mkdir(parents=True, exist_ok=True)
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -83,10 +128,16 @@ async def main_async(files: list[Path], concurrency: int):
     _log_lines: list[str] = []
 
     def tee(msg: str):
+        """同时向控制台和内存日志缓冲区写入消息。
+
+        Args:
+            msg: 待记录的文本。
+        """
         print(msg)
         _log_lines.append(msg)
 
     def flush_log():
+        """将内存日志缓冲区一次性写入压测日志文件。"""
         with open(log_path, "w", encoding="utf-8") as f:
             f.write("\n".join(_log_lines) + "\n")
 
@@ -100,6 +151,15 @@ async def main_async(files: list[Path], concurrency: int):
     tee(f"{'='*70}\n")
 
     async def bounded(fp: Path, idx: int):
+        """在并发信号量保护下运行单份简历任务。
+
+        Args:
+            fp: 待提交的 PDF 路径。
+            idx: 用于压测日志定位的任务序号。
+
+        Returns:
+            单份简历的任务结果字典。
+        """
         async with sem:
             return await run_one(session, fp, idx, wall_t0)
 
@@ -160,6 +220,7 @@ async def main_async(files: list[Path], concurrency: int):
 
 
 def main():
+    """解析命令行参数并启动异步并发压测。"""
     parser = argparse.ArgumentParser(description="异步接口并发压测")
     parser.add_argument("--dir",         default=str(TEST_DIR), help="测试目录")
     parser.add_argument("--concurrency", type=int, default=0,

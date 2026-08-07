@@ -33,7 +33,14 @@ SEP = "=" * 60
 
 
 def _make_resp(text: str = '{"candidate":{"name":"测试"}}') -> MagicMock:
-    """构造一个模拟的 chat completion 响应对象。"""
+    """构造符合解析器访问结构的模型响应对象。
+
+    Args:
+        text: 模拟响应的正文内容。
+
+    Returns:
+        带有 ``choices`` 和 ``usage`` 属性的模拟对象。
+    """
     choice  = MagicMock()
     choice.message.content = text
     usage   = MagicMock()
@@ -46,22 +53,45 @@ def _make_resp(text: str = '{"candidate":{"name":"测试"}}') -> MagicMock:
     return resp
 
 
-def _make_status_error(status_code: int) -> APIStatusError:
+def _make_status_error(
+    status_code: int,
+    message: str | None = None,
+) -> APIStatusError:
+    """构造指定状态码的 OpenAI HTTP 状态异常。
+
+    Args:
+        status_code: 要模拟的 HTTP 状态码。
+        message: 可选的模型网关错误详情。
+
+    Returns:
+        包含模拟请求和响应的 ``APIStatusError``。
+    """
     req  = httpx.Request("POST", "http://mock/v1/chat/completions")
     resp = httpx.Response(status_code, request=req)
+    error_message = message or f"HTTP {status_code}"
     return APIStatusError(
-        message=f"HTTP {status_code}",
+        message=error_message,
         response=resp,
-        body={"error": {"message": f"HTTP {status_code}"}},
+        body={"error": {"message": error_message}},
     )
 
 
 def _make_connection_error() -> APIConnectionError:
+    """构造无法连接模型服务的异常。
+
+    Returns:
+        绑定模拟请求的 ``APIConnectionError``。
+    """
     req = httpx.Request("POST", "http://mock/v1/chat/completions")
     return APIConnectionError(request=req)
 
 
 def _make_timeout_error() -> APITimeoutError:
+    """构造模型服务请求超时异常。
+
+    Returns:
+        绑定模拟请求的 ``APITimeoutError``。
+    """
     req = httpx.Request("POST", "http://mock/v1/chat/completions")
     return APITimeoutError(request=req)
 
@@ -70,14 +100,23 @@ MESSAGES = [{"role": "user", "content": "test"}]
 
 
 class TestModelFallback(unittest.TestCase):
+    """验证模型错误分类、重试和回退链行为。"""
 
     def _patch_create(self, side_effects: list):
-        """patch client.chat.completions.create，按顺序返回/抛出 side_effects。"""
+        """按顺序为模型调用配置返回值或异常。
+
+        Args:
+            side_effects: ``MagicMock`` 依次返回或抛出的对象列表。
+
+        Returns:
+            替换模型 ``create`` 方法的 patch 上下文管理器。
+        """
         mock = MagicMock(side_effect=side_effects)
         return patch.object(parser_module.client.chat.completions, "create", mock)
 
     # ── 场景 1：主模型 404 → 回退 Kimi 成功 ──────────────────────────
     def test_fallback_on_404(self):
+        """验证主模型返回 404 时回退到首个备用模型。"""
         print(f"\n{SEP}")
         print("场景 1: 主模型 404 → 回退到 Kimi-K2.6 成功")
         effects = [
@@ -95,6 +134,7 @@ class TestModelFallback(unittest.TestCase):
 
     # ── 场景 2：主模型超时 → 回退 Kimi 成功 ─────────────────────────
     def test_fallback_on_timeout(self):
+        """验证主模型超时后允许回退到备用模型。"""
         print(f"\n{SEP}")
         print("场景 2: 主模型超时 → 回退到 Kimi-K2.6 成功")
         effects = [
@@ -109,6 +149,7 @@ class TestModelFallback(unittest.TestCase):
 
     # ── 场景 3：主模型 503 → Kimi 500 → DeepSeek 成功 ───────────────
     def test_fallback_chain_to_second(self):
+        """验证连续可回退错误会遍历至第二个备用模型。"""
         print(f"\n{SEP}")
         print("场景 3: 主模型 503 → Kimi 500 → DeepSeek-V4-Pro 成功")
         effects = [
@@ -126,6 +167,7 @@ class TestModelFallback(unittest.TestCase):
 
     # ── 场景 4：所有模型均失败 → 抛出最后一个错误 ───────────────────
     def test_all_models_fail(self):
+        """验证全部模型失败时抛出最终异常。"""
         print(f"\n{SEP}")
         print("场景 4: 全部模型失败 → 抛出最后错误")
         effects = [
@@ -141,6 +183,7 @@ class TestModelFallback(unittest.TestCase):
 
     # ── 场景 5：连接错误 → 立即抛出，不回退 ────────────────────────
     def test_no_fallback_on_connection_error(self):
+        """验证连接错误立即抛出且不切换模型。"""
         print(f"\n{SEP}")
         print("场景 5: 连接错误 → 立即抛出（不回退）")
         effects = [_make_connection_error()]
@@ -150,8 +193,21 @@ class TestModelFallback(unittest.TestCase):
         self.assertEqual(mock_create.call_count, 1)
         print(f"  ✓ APIConnectionError 立即抛出，共调用 {mock_create.call_count} 次（未回退）")
 
+    def test_connection_error_is_warning_until_outer_task_fails(self):
+        """验证可由外层处理的连接异常不会提前产生 ERROR 告警。"""
+        effects = [_make_connection_error()]
+        with self._patch_create(effects), \
+                patch.object(parser_module.logger, "warning") as warning, \
+                patch.object(parser_module.logger, "error") as error:
+            with self.assertRaises(APIConnectionError):
+                parser_module._call_llm_model_once(MESSAGES, "model-a")
+
+        warning.assert_called_once()
+        error.assert_not_called()
+
     # ── 场景 6：401 鉴权失败 → 立即抛出，不回退 ────────────────────
     def test_no_fallback_on_401(self):
+        """验证鉴权错误立即抛出且不切换模型。"""
         print(f"\n{SEP}")
         print("场景 6: 401 鉴权失败 → 立即抛出（不回退）")
         effects = [_make_status_error(401)]
@@ -164,6 +220,7 @@ class TestModelFallback(unittest.TestCase):
 
     # ── 场景 7：thinking block 错误 → 同模型去掉参数重试后成功 ──────
     def test_thinking_block_retry_then_success(self):
+        """验证 thinking 参数错误会在当前模型移除参数后重试。"""
         print(f"\n{SEP}")
         print("场景 7: thinking block 错误 → 去掉 thinking 参数重试成功")
         effects = [
@@ -182,6 +239,7 @@ class TestModelFallback(unittest.TestCase):
 
     # ── 场景 8：thinking block → 重试仍失败 → 回退到 Kimi ──────────
     def test_thinking_block_retry_then_fallback(self):
+        """验证当前模型无参数重试仍失败后进入备用模型链。"""
         print(f"\n{SEP}")
         print("场景 8: thinking block 重试仍失败 → 回退到 Kimi-K2.6")
         effects = [
@@ -196,6 +254,48 @@ class TestModelFallback(unittest.TestCase):
         models_tried = [c.kwargs["model"] for c in mock_create.call_args_list]
         self.assertEqual(models_tried[2], "Kimi-K2.6")
         print(f"  ✓ thinking block 重试后失败，回退到 Kimi-K2.6 成功")
+
+    def test_resume_prompt_cache_key_is_forwarded(self):
+        """验证简历解析提供的固定缓存键会传给 OpenAI 兼容客户端。"""
+        with self._patch_create([_make_resp()]) as mock_create:
+            result = parser_module._call_llm_model_once(
+                MESSAGES,
+                "Qwen3.5-397B-A17B",
+                prompt_cache_key="resume-parse-test",
+            )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(
+            mock_create.call_args.kwargs["prompt_cache_key"],
+            "resume-parse-test",
+        )
+
+    def test_unsupported_prompt_cache_key_retries_without_parameter(self):
+        """验证旧模型网关拒绝缓存字段时，同一模型自动无缓存重试。"""
+        effects = [
+            _make_status_error(
+                400,
+                "extra inputs are not permitted: prompt_cache_key",
+            ),
+            _make_resp(),
+        ]
+        with self._patch_create(effects) as mock_create:
+            result = parser_module._call_llm_model_once(
+                MESSAGES,
+                "Qwen3.5-397B-A17B",
+                prompt_cache_key="resume-parse-test",
+            )
+
+        self.assertIsNotNone(result)
+        self.assertEqual(mock_create.call_count, 2)
+        self.assertIn(
+            "prompt_cache_key",
+            mock_create.call_args_list[0].kwargs,
+        )
+        self.assertNotIn(
+            "prompt_cache_key",
+            mock_create.call_args_list[1].kwargs,
+        )
 
 
 if __name__ == "__main__":

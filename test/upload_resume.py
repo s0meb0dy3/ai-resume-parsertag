@@ -21,6 +21,21 @@ TIMEOUT = 300
 
 
 def parse_resume(pdf_path: Path, server: str) -> dict:
+    """通过 OpenAI 兼容接口上传并解析本地 PDF。
+
+    Args:
+        pdf_path: 本地 PDF 文件路径。
+        server: 解析服务的基础地址。
+
+    Returns:
+        模型消息正文反序列化后的简历字典。
+
+    Raises:
+        OSError: PDF 文件无法读取。
+        requests.RequestException: HTTP 请求失败或超时。
+        KeyError: 响应缺少 OpenAI 兼容协议要求的字段。
+        json.JSONDecodeError: 模型消息正文不是合法 JSON。
+    """
     pdf_bytes = pdf_path.read_bytes()
     payload = {
         "model": "DeepSeek-OCR",
@@ -49,6 +64,11 @@ def parse_resume(pdf_path: Path, server: str) -> dict:
 
 
 def print_summary(result: dict):
+    """向控制台输出简历基本信息和经历摘要。
+
+    Args:
+        result: OpenAI 兼容接口返回的简历解析结果。
+    """
     c = result.get("candidate", {})
     gender_map = {1: "男", 2: "女"}
     SEP = "─" * 50
@@ -84,6 +104,7 @@ def print_summary(result: dict):
 
 
 def main():
+    """校验命令行输入并执行上传、展示和可选结果持久化。"""
     parser = argparse.ArgumentParser(description="本地 PDF 简历上传解析工具")
     parser.add_argument("pdf", help="PDF 文件路径")
     parser.add_argument("--url", default=DEFAULT_URL, help=f"服务地址，默认 {DEFAULT_URL}")

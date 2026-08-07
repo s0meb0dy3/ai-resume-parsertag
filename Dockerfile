@@ -5,7 +5,7 @@ WORKDIR /app
 ENV TZ=Asia/Shanghai
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --timeout 600 --retries 5 -r requirements.txt
 
 COPY app.py .
 COPY config.py .

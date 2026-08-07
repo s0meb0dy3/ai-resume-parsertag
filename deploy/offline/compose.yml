@@ -1,0 +1,24 @@
+name: ai-resume-parsertag-offline
+
+services:
+  ai-resume-parsertag:
+    image: ${IMAGE_NAME:-ai-resume-parsertag}:${IMAGE_TAG:-v3.1.1-20260805}
+    platform: linux/amd64
+    container_name: ${CONTAINER_NAME:-ai-resume-parsertag}
+    restart: unless-stopped
+    pull_policy: never
+    ports:
+      - "${HOST_PORT:-21804}:${SERVICE_PORT:-21804}"
+    env_file:
+      - .env
+    volumes:
+      - ./data/logs:/app/logs
+      - ./data/uploads:/app/uploads
+      - ./data/results:/app/results
+      - ./data/schemas:/app/schemas
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os, urllib.request; urllib.request.urlopen('http://localhost:%s/health' % os.getenv('SERVICE_PORT', '21804'))"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 12

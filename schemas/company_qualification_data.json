@@ -1,0 +1,324 @@
+{
+  "version": "2026.08.05",
+  "effectiveDate": "2026-08-05",
+  "scope": "用于简历公司背景规则兜底的审慎快照；资质变化时按来源复核并升级版本",
+  "sources": [
+    {
+      "id": "samr-enterprise-registry",
+      "name": "国家企业信用信息公示系统",
+      "url": "https://www.gsxt.gov.cn/"
+    },
+    {
+      "id": "sasac-central-enterprises",
+      "name": "国务院国资委中央企业名录",
+      "url": "http://www.sasac.gov.cn/n2588035/n2641579/n2641645/"
+    },
+    {
+      "id": "stock-exchanges",
+      "name": "上海、深圳、北京及香港交易所上市公司公告",
+      "url": "https://www.sse.com.cn/"
+    },
+    {
+      "id": "high-tech-enterprise-registry",
+      "name": "国家高新技术企业认定管理工作网及属地公示",
+      "url": "https://www.innocom.gov.cn/"
+    },
+    {
+      "id": "specialized-sme-registry",
+      "name": "工业和信息化部专精特新企业公示",
+      "url": "https://www.miit.gov.cn/"
+    },
+    {
+      "id": "fortune-global-500",
+      "name": "财富世界500强年度榜单",
+      "url": "https://fortune.com/ranking/global500/"
+    },
+    {
+      "id": "china-enterprise-500",
+      "name": "中国企业联合会中国企业500强榜单",
+      "url": "https://www.cec1979.org.cn/"
+    },
+    {
+      "id": "china-private-enterprise-500",
+      "name": "全国工商联中国民营企业500强榜单",
+      "url": "https://www.acfic.org.cn/"
+    },
+    {
+      "id": "company-disclosure",
+      "name": "企业官网、招股书和年度报告",
+      "url": "https://www.cninfo.com.cn/"
+    }
+  ],
+  "allowedQualifications": [
+    "行业龙头", "知名中大型企业", "世界500强", "中国500强", "中国民营500强",
+    "知名跨国企业", "独角兽企业", "高成长创业公司", "国企/央企", "上市公司",
+    "高新技术企业", "专精特新企业", "专精特新小巨人", "制造业单项冠军",
+    "国家级企业技术中心", "科研院所/事业单位"
+  ],
+  "companies": [
+    {
+      "name": "阿里巴巴集团控股有限公司",
+      "aliases": ["阿里巴巴", "阿里集团", "淘宝", "天猫"],
+      "qualifications": ["行业龙头", "上市公司"],
+      "sourceRefs": ["stock-exchanges", "company-disclosure"]
+    },
+    {
+      "name": "蚂蚁科技集团股份有限公司",
+      "aliases": ["蚂蚁集团", "蚂蚁金服", "支付宝"],
+      "qualifications": ["行业龙头"],
+      "sourceRefs": ["samr-enterprise-registry", "company-disclosure"]
+    },
+    {
+      "name": "腾讯控股有限公司",
+      "aliases": ["腾讯", "腾讯科技", "微信"],
+      "qualifications": ["行业龙头", "上市公司"],
+      "sourceRefs": ["stock-exchanges", "company-disclosure"]
+    },
+    {
+      "name": "北京字节跳动科技有限公司",
+      "aliases": ["字节跳动", "字节", "抖音", "TikTok", "今日头条"],
+      "qualifications": ["行业龙头"],
+      "sourceRefs": ["samr-enterprise-registry", "company-disclosure"]
+    },
+    {
+      "name": "百度集团股份有限公司",
+      "aliases": ["百度", "百度在线"],
+      "qualifications": ["行业龙头", "上市公司"],
+      "sourceRefs": ["stock-exchanges", "company-disclosure"]
+    },
+    {
+      "name": "华为技术有限公司",
+      "aliases": ["华为", "华为技术"],
+      "qualifications": ["行业龙头", "高新技术企业"],
+      "sourceRefs": ["high-tech-enterprise-registry", "company-disclosure"]
+    },
+    {
+      "name": "美团",
+      "aliases": ["美团", "北京三快在线科技"],
+      "qualifications": ["行业龙头", "上市公司"],
+      "sourceRefs": ["stock-exchanges", "company-disclosure"]
+    },
+    {
+      "name": "京东集团股份有限公司",
+      "aliases": ["京东", "京东集团"],
+      "qualifications": ["行业龙头", "上市公司"],
+      "sourceRefs": ["stock-exchanges", "company-disclosure"]
+    },
+    {
+      "name": "拼多多控股公司",
+      "aliases": ["拼多多", "PDD"],
+      "qualifications": ["行业龙头", "上市公司"],
+      "sourceRefs": ["stock-exchanges", "company-disclosure"]
+    },
+    {
+      "name": "网易公司",
+      "aliases": ["网易", "网易科技"],
+      "qualifications": ["行业龙头", "上市公司"],
+      "sourceRefs": ["stock-exchanges", "company-disclosure"]
+    },
+    {
+      "name": "北京快手科技有限公司",
+      "aliases": ["快手", "快手科技"],
+      "qualifications": ["行业龙头", "上市公司"],
+      "sourceRefs": ["stock-exchanges", "company-disclosure"]
+    },
+    {
+      "name": "上海哔哩哔哩科技有限公司",
+      "aliases": ["哔哩哔哩", "bilibili", "B站"],
+      "qualifications": ["知名中大型企业", "上市公司"],
+      "sourceRefs": ["stock-exchanges", "company-disclosure"]
+    },
+    {
+      "name": "携程集团有限公司",
+      "aliases": ["携程", "携程旅行", "Trip.com"],
+      "qualifications": ["知名中大型企业", "上市公司"],
+      "sourceRefs": ["stock-exchanges", "company-disclosure"]
+    },
+    {
+      "name": "北京小桔科技有限公司",
+      "aliases": ["滴滴", "滴滴出行"],
+      "qualifications": ["知名中大型企业"],
+      "sourceRefs": ["samr-enterprise-registry", "company-disclosure"]
+    },
+    {
+      "name": "小米集团",
+      "aliases": ["小米", "小米科技"],
+      "qualifications": ["知名中大型企业", "上市公司"],
+      "sourceRefs": ["stock-exchanges", "company-disclosure"]
+    },
+    {
+      "name": "深圳市大疆创新科技有限公司",
+      "aliases": ["大疆", "DJI", "大疆创新"],
+      "qualifications": ["独角兽企业", "高新技术企业"],
+      "sourceRefs": ["high-tech-enterprise-registry", "company-disclosure"]
+    },
+    {
+      "name": "北京月之暗面科技有限公司",
+      "aliases": ["月之暗面", "Moonshot AI", "Kimi"],
+      "qualifications": ["高成长创业公司", "独角兽企业"],
+      "sourceRefs": ["samr-enterprise-registry", "company-disclosure"]
+    },
+    {
+      "name": "北京智谱华章科技有限公司",
+      "aliases": ["智谱AI", "智谱华章", "Zhipu AI"],
+      "qualifications": ["高成长创业公司", "独角兽企业", "高新技术企业"],
+      "sourceRefs": ["high-tech-enterprise-registry", "company-disclosure"]
+    },
+    {
+      "name": "杭州深度求索人工智能基础技术研究有限公司",
+      "aliases": ["深度求索", "DeepSeek"],
+      "qualifications": ["高成长创业公司"],
+      "sourceRefs": ["samr-enterprise-registry", "company-disclosure"]
+    },
+    {
+      "name": "微软公司",
+      "aliases": ["微软", "Microsoft"],
+      "qualifications": ["世界500强", "知名跨国企业", "上市公司"],
+      "sourceRefs": ["fortune-global-500", "stock-exchanges", "company-disclosure"]
+    },
+    {
+      "name": "谷歌公司",
+      "aliases": ["谷歌", "Google", "Alphabet"],
+      "qualifications": ["世界500强", "知名跨国企业", "上市公司"],
+      "sourceRefs": ["fortune-global-500", "stock-exchanges", "company-disclosure"]
+    },
+    {
+      "name": "亚马逊公司",
+      "aliases": ["亚马逊", "Amazon", "AWS"],
+      "qualifications": ["世界500强", "知名跨国企业", "上市公司"],
+      "sourceRefs": ["fortune-global-500", "stock-exchanges", "company-disclosure"]
+    },
+    {
+      "name": "苹果公司",
+      "aliases": ["苹果", "Apple"],
+      "qualifications": ["世界500强", "知名跨国企业", "上市公司"],
+      "sourceRefs": ["fortune-global-500", "stock-exchanges", "company-disclosure"]
+    },
+    {
+      "name": "英伟达公司",
+      "aliases": ["英伟达", "NVIDIA"],
+      "qualifications": ["世界500强", "知名跨国企业", "上市公司"],
+      "sourceRefs": ["fortune-global-500", "stock-exchanges", "company-disclosure"]
+    },
+    {
+      "name": "国际商业机器公司",
+      "aliases": ["IBM", "国际商业机器"],
+      "qualifications": ["世界500强", "知名跨国企业", "上市公司"],
+      "sourceRefs": ["fortune-global-500", "stock-exchanges", "company-disclosure"]
+    },
+    {
+      "name": "思爱普公司",
+      "aliases": ["SAP", "思爱普"],
+      "qualifications": ["世界500强", "知名跨国企业", "上市公司"],
+      "sourceRefs": ["fortune-global-500", "stock-exchanges", "company-disclosure"]
+    },
+    {
+      "name": "西门子股份公司",
+      "aliases": ["西门子", "Siemens"],
+      "qualifications": ["世界500强", "知名跨国企业", "上市公司"],
+      "sourceRefs": ["fortune-global-500", "stock-exchanges", "company-disclosure"]
+    },
+    {
+      "name": "中国航空工业集团有限公司",
+      "aliases": ["中国航空工业", "中航工业", "航空工业集团"],
+      "qualifications": ["国企/央企"],
+      "sourceRefs": ["sasac-central-enterprises", "company-disclosure"]
+    },
+    {
+      "name": "国家电网有限公司",
+      "aliases": ["国家电网", "国网"],
+      "qualifications": ["国企/央企"],
+      "sourceRefs": ["sasac-central-enterprises", "company-disclosure"]
+    },
+    {
+      "name": "中国移动通信集团有限公司",
+      "aliases": ["中国移动", "移动集团"],
+      "qualifications": ["国企/央企"],
+      "sourceRefs": ["sasac-central-enterprises", "company-disclosure"]
+    },
+    {
+      "name": "中国电信集团有限公司",
+      "aliases": ["中国电信", "电信集团"],
+      "qualifications": ["国企/央企"],
+      "sourceRefs": ["sasac-central-enterprises", "company-disclosure"]
+    },
+    {
+      "name": "中国联合网络通信集团有限公司",
+      "aliases": ["中国联通", "联通集团"],
+      "qualifications": ["国企/央企"],
+      "sourceRefs": ["sasac-central-enterprises", "company-disclosure"]
+    },
+    {
+      "name": "中国石油天然气集团有限公司",
+      "aliases": ["中国石油", "中石油"],
+      "qualifications": ["国企/央企"],
+      "sourceRefs": ["sasac-central-enterprises", "company-disclosure"]
+    },
+    {
+      "name": "中国石油化工集团有限公司",
+      "aliases": ["中国石化", "中石化"],
+      "qualifications": ["国企/央企"],
+      "sourceRefs": ["sasac-central-enterprises", "company-disclosure"]
+    },
+    {
+      "name": "美的集团股份有限公司",
+      "aliases": ["美的", "美的集团"],
+      "qualifications": ["行业龙头", "上市公司", "高新技术企业"],
+      "sourceRefs": ["stock-exchanges", "high-tech-enterprise-registry"]
+    },
+    {
+      "name": "海尔智家股份有限公司",
+      "aliases": ["海尔", "海尔智家"],
+      "qualifications": ["行业龙头", "上市公司", "高新技术企业"],
+      "sourceRefs": ["stock-exchanges", "high-tech-enterprise-registry"]
+    },
+    {
+      "name": "深圳市雷赛智能控制股份有限公司",
+      "aliases": ["雷赛智能", "雷赛"],
+      "qualifications": ["上市公司", "高新技术企业", "专精特新企业"],
+      "sourceRefs": ["stock-exchanges", "high-tech-enterprise-registry", "specialized-sme-registry"]
+    },
+    {
+      "name": "东莞怡合达自动化股份有限公司",
+      "aliases": ["怡合达", "东莞怡合达"],
+      "qualifications": ["上市公司", "高新技术企业"],
+      "sourceRefs": ["stock-exchanges", "high-tech-enterprise-registry"]
+    },
+    {
+      "name": "深圳市道通科技股份有限公司",
+      "aliases": ["道通科技", "深圳道通科技"],
+      "qualifications": ["上市公司", "高新技术企业"],
+      "sourceRefs": ["stock-exchanges", "high-tech-enterprise-registry"]
+    },
+    {
+      "name": "金蝶软件（中国）有限公司",
+      "aliases": ["金蝶软件", "金蝶"],
+      "qualifications": ["上市公司", "高新技术企业"],
+      "sourceRefs": ["stock-exchanges", "high-tech-enterprise-registry"]
+    },
+    {
+      "name": "中软国际有限公司",
+      "aliases": ["中软国际"],
+      "qualifications": ["上市公司", "高新技术企业"],
+      "sourceRefs": ["stock-exchanges", "high-tech-enterprise-registry"]
+    },
+    {
+      "name": "深圳市宝明科技股份有限公司",
+      "aliases": ["宝明科技"],
+      "qualifications": ["上市公司", "高新技术企业"],
+      "sourceRefs": ["stock-exchanges", "high-tech-enterprise-registry"]
+    },
+    {
+      "name": "中国科学院",
+      "aliases": ["中科院", "中国科学院"],
+      "qualifications": ["科研院所/事业单位"],
+      "sourceRefs": ["company-disclosure"]
+    },
+    {
+      "name": "深圳市太赫兹科学技术创新研究院",
+      "aliases": ["深圳太赫兹研究院", "太赫兹科学技术创新研究院"],
+      "qualifications": ["科研院所/事业单位"],
+      "sourceRefs": ["samr-enterprise-registry", "company-disclosure"]
+    }
+  ]
+}

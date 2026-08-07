@@ -27,6 +27,23 @@ SEP = "─" * 70
 
 def submit(host: str, file_path: Path, job_title: str = "", required_skills: str = "",
            job_description: str = "", job_sensitive_words: str = "") -> str:
+    """提交一份 PDF 到异步解析打标接口。
+
+    Args:
+        host: 待验证服务的基础地址。
+        file_path: 待提交的 PDF 路径。
+        job_title: 目标岗位名称。
+        required_skills: 岗位必要技能文本。
+        job_description: 岗位描述文本。
+        job_sensitive_words: 自定义敏感词文本。
+
+    Returns:
+        服务端任务标识。
+
+    Raises:
+        requests.HTTPError: 接口返回非成功 HTTP 状态。
+        RuntimeError: 接口业务响应码表示提交失败。
+    """
     with open(file_path, "rb") as f:
         resp = requests.post(
             f"{host}/api/resume/async/parse",
@@ -49,6 +66,21 @@ def submit(host: str, file_path: Path, job_title: str = "", required_skills: str
 
 
 def poll(host: str, task_id: str, timeout: int = 300) -> dict:
+    """轮询异步任务直至成功终态。
+
+    Args:
+        host: 待验证服务的基础地址。
+        task_id: 服务端任务标识。
+        timeout: 最大轮询时长，单位为秒。
+
+    Returns:
+        解析和打标的完整结果字典。
+
+    Raises:
+        requests.HTTPError: 查询接口返回非成功 HTTP 状态。
+        RuntimeError: 查询失败或任务进入失败终态。
+        TimeoutError: 在指定时长内未进入终态。
+    """
     start      = time.time()
     last_status = -1
     while time.time() - start < timeout:
@@ -82,7 +114,12 @@ def poll(host: str, task_id: str, timeout: int = 300) -> dict:
 
 
 def save_result(result: dict, filename: str):
-    """将结果保存到 results/ 目录"""
+    """将结果按时间和简历名称写入结果目录。
+
+    Args:
+        result: 要持久化的解析打标结果。
+        filename: 用于生成安全结果文件名的原简历名称。
+    """
     RESULT_DIR.mkdir(parents=True, exist_ok=True)
     stem     = Path(filename).stem[:40]
     safe     = "".join(c if c.isalnum() or c in "-_." else "_" for c in stem)
@@ -94,6 +131,12 @@ def save_result(result: dict, filename: str):
 
 
 def print_result(result: dict, filename: str):
+    """向控制台输出候选人、经历和标签摘要。
+
+    Args:
+        result: 完成任务返回的结果字典。
+        filename: 当前简历文件名。
+    """
     c          = result.get("candidate", {})
     gender_map = {1: "男", 2: "女"}
 
@@ -146,6 +189,20 @@ def print_result(result: dict, filename: str):
 
 def run_single(host: str, file_path: Path, job_title: str, required_skills: str,
                job_description: str, job_sensitive_words: str, save: bool) -> bool:
+    """执行一份简历的提交、轮询、展示和可选持久化。
+
+    Args:
+        host: 待验证服务的基础地址。
+        file_path: 待提交的 PDF 路径。
+        job_title: 目标岗位名称。
+        required_skills: 岗位必要技能文本。
+        job_description: 岗位描述文本。
+        job_sensitive_words: 自定义敏感词文本。
+        save: 是否将完整结果写入本地文件。
+
+    Returns:
+        全流程成功返回 ``True``，捕获到异常时返回 ``False``。
+    """
     print(f"\n{'='*70}")
     print(f"文件: {file_path.name}")
     print(f"岗位: {job_title or '(未填)'}  技能要求: {required_skills or '(未填)'}")
@@ -170,6 +227,7 @@ def run_single(host: str, file_path: Path, job_title: str, required_skills: str,
 
 
 def main():
+    """解析命令行参数并执行单份或批量打标验证。"""
     parser = argparse.ArgumentParser(description="简历打标测试程序")
     parser.add_argument("--host",   default=HOST,        help=f"服务地址（默认 {HOST}）")
     parser.add_argument("--file",   default=None,        help="指定单个 PDF 文件路径")

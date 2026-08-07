@@ -18,10 +18,31 @@ _media_upload_enabled = os.getenv("LANGFUSE_MEDIA_UPLOAD_ENABLED", "false").lowe
 _enabled = bool(LANGFUSE_SECRET_KEY and LANGFUSE_PUBLIC_KEY)
 
 if _enabled:
-    from langfuse import Langfuse, observe, propagate_attributes, get_client  # noqa: F401
+    from langfuse import (  # noqa: F401
+        Langfuse,
+        get_client,
+        observe as _langfuse_observe,
+        propagate_attributes,
+    )
+
+    def observe(func=None, **kwargs):
+        """创建默认不采集函数参数和返回值的 Langfuse span。
+
+        简历、岗位描述、原文、图片和模型消息都可能包含 PII。业务代码如需记录
+        可观测字段，应通过 ``update_current_observation`` 显式提交最小化摘要。
+        """
+        kwargs.setdefault("capture_input", False)
+        kwargs.setdefault("capture_output", False)
+        if func is not None:
+            return _langfuse_observe(func, **kwargs)
+        return _langfuse_observe(**kwargs)
 
     def update_current_observation(**kwargs):
-        """将当前 span 的 output / metadata 等字段写入 Langfuse。"""
+        """更新当前 Langfuse span 的观测字段。
+
+        Args:
+            **kwargs: 传递给 Langfuse ``update_current_span`` 的字段。
+        """
         get_client().update_current_span(**kwargs)
 
     langfuse = Langfuse(
@@ -36,21 +57,66 @@ else:
     langfuse = None  # type: ignore[assignment]
 
     def update_current_observation(**kwargs):  # type: ignore[misc]
+        """在 Langfuse 未启用时忽略观测字段更新。
+
+        Args:
+            **kwargs: 为保持与启用分支一致而接受的任意观测字段。
+
+        Note:
+            空操作是预期降级行为，缺少可观测性凭据不得影响业务执行。
+        """
         pass
 
     def observe(name=None, **kwargs):  # type: ignore[misc]
-        """Langfuse 未配置时的空操作装饰器。"""
+        """返回与 Langfuse ``observe`` 兼容的空操作装饰器。
+
+        Args:
+            name: 装饰器名称，或不带括号使用时传入的被装饰函数。
+            **kwargs: 为兼容 Langfuse 装饰器而接受的其他参数。
+
+        Returns:
+            原函数，或一个直接返回原函数的装饰器。
+        """
         def decorator(fn):
+            """原样返回被装饰函数。
+
+            Args:
+                fn: 被装饰的可调用对象。
+
+            Returns:
+                未包装的原可调用对象。
+            """
             return fn
         if callable(name):
             return name
         return decorator
 
     class propagate_attributes:  # type: ignore[no-redef]
-        """Langfuse 未配置时的空操作上下文管理器。"""
+        """Langfuse 未配置时保持调用结构不变的上下文管理器。"""
+
         def __init__(self, **kwargs):
+            """接受并忽略待传播的观测属性。
+
+            Args:
+                **kwargs: 为兼容 Langfuse 上下文管理器而接受的属性。
+            """
             pass
+
         def __enter__(self):
+            """进入空操作上下文。
+
+            Returns:
+                当前上下文管理器实例。
+            """
             return self
+
         def __exit__(self, *args):
+            """退出上下文且不抑制业务异常。
+
+            Args:
+                *args: 上下文协议传入的异常类型、异常值和回溯。
+
+            Returns:
+                ``None``，表示业务异常应继续传播。
+            """
             pass

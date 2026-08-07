@@ -1,0 +1,62 @@
+{
+  "schemaVersion": "1.0",
+  "datasetVersion": "example-2026.08.04",
+  "description": "脱敏格式示例，不包含真实简历或真实候选人信息",
+  "thresholds": {
+    "fieldAccuracy": 0.95,
+    "positiveMicroF1": 0.9,
+    "negativeF1": 0.85
+  },
+  "cases": [
+    {
+      "id": "resume-001",
+      "source": {
+        "file": "resume-001.pdf",
+        "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "expected": {
+        "resume": {
+          "candidate": {
+            "name": "候选人甲",
+            "gender": 1,
+            "age": 28,
+            "expectedPosition": "后端开发工程师"
+          },
+          "educations": [
+            {
+              "school": "示例大学",
+              "major": "计算机科学与技术",
+              "education": "本科",
+              "startDate": "2016-09",
+              "endDate": "2020-06"
+            }
+          ],
+          "works": [
+            {
+              "company": "示例科技有限公司",
+              "position": "后端开发工程师",
+              "startDate": "2020-07",
+              "endDate": "2024-06"
+            }
+          ],
+          "projects": [
+            {
+              "projectName": "订单系统",
+              "role": "核心开发",
+              "startDate": "2022-01",
+              "endDate": "2023-06"
+            }
+          ]
+        },
+        "positiveTags": {
+          "education": ["本科"],
+          "companyBg": [],
+          "workYears": ["3-5年"],
+          "skills": ["Java", "Spring Boot", "MySQL"],
+          "industry": ["企业服务/SaaS"]
+        },
+        "negativeTags": []
+      }
+    }
+  ]
+}

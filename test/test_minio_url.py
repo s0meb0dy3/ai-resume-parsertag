@@ -25,10 +25,26 @@ RESUMES = [
 
 
 def minio_url(fname: str) -> str:
+    """生成包含安全 URL 编码文件名的 MinIO 地址。
+
+    Args:
+        fname: MinIO 对象的中文或英文文件名。
+
+    Returns:
+        可供 HTTP 客户端访问的对象 URL。
+    """
     return f"{MINIO}/{urllib.parse.quote(fname)}"
 
 
 def submit():
+    """以 URL 模式批量提交预设的 MinIO 简历。
+
+    Returns:
+        文件名与任务标识组成的列表；提交失败项的任务标识为 ``None``。
+
+    Raises:
+        requests.HTTPError: 批量提交接口返回非成功 HTTP 状态。
+    """
     resumes_payload = [
         {"type": "url", "file": {"name": fname, "path": minio_url(fname)}}
         for fname in RESUMES
@@ -68,6 +84,16 @@ def submit():
 
 
 def poll(fname: str, task_id: str, timeout: int = 300):
+    """轮询 MinIO 简历任务直至完成、失败或超时。
+
+    Args:
+        fname: 用于输出进度的文件名。
+        task_id: 服务端任务标识。
+        timeout: 最大轮询时长，单位为秒。
+
+    Returns:
+        成功时返回结果字典，业务失败或超时时返回 ``None``。
+    """
     start, last = time.time(), -1
     while time.time() - start < timeout:
         body = requests.get(RESULT_EP, params={"taskId": task_id}, timeout=10).json()
@@ -91,6 +117,12 @@ def poll(fname: str, task_id: str, timeout: int = 300):
 
 
 def print_result(fname: str, r: dict):
+    """向控制台输出解析和打标结果摘要。
+
+    Args:
+        fname: 当前简历文件名。
+        r: 完成任务返回的结果字典。
+    """
     c  = r.get("candidate", {})
     gm = {1:"男", 2:"女"}
     print(f"\n{SEP}")
@@ -111,6 +143,7 @@ def print_result(fname: str, r: dict):
 
 
 def main():
+    """检查服务及 MinIO 连通性并执行预设批量验证。"""
     # 健康检查
     try:
         requests.get(f"{HOST}/health", timeout=5).raise_for_status()

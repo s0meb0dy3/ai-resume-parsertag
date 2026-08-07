@@ -2,15 +2,16 @@
   "_comment": [
     "AIHR 简历解析打标 — 完整输出模版（v3）",
     "positiveTags.tagsArray 维度固定顺序 : education → companyBg → workYears → skills → industry",
-    "education allowedValues  : C9 | 985 | 211 | 双一流 | 海外名校(QS50) | 海外名校(QS100) | 海外硕士 | 博士 | 硕士 | 本科 | 专科及以下",
-    "companyBg allowedValues  : 头部大厂 | 腰部中厂 | 外企500强 | 一线外企 | 独角兽 | 明星创业 | 国企/央企 | 传统企业转型",
-    "workYears allowedValues  : 应届 | 2-3年 | 3-5年 | 5-10年 | 10-15年 | 15年+",
-    "industry  allowedValues  : 互联网/电商 | 金融科技 | 企业服务/SaaS | 游戏 | 在线教育 | 医疗健康 | 人工智能 | 汽车/出行 | 物联网/硬件 | 物流/供应链",
+    "education allowedValues  : C9 | 985 | 211 | 双一流 | 海外名校QS50 | 海外名校QS100 | 海外硕士 | 博士 | 硕士 | 本科 | 专科及以下",
+    "companyBg allowedValues  : 行业龙头 | 知名中大型企业 | 世界500强 | 中国500强 | 中国民营500强 | 知名跨国企业 | 独角兽企业 | 高成长创业公司 | 国企/央企 | 上市公司 | 高新技术企业 | 专精特新企业 | 专精特新小巨人 | 制造业单项冠军 | 国家级企业技术中心 | 科研院所/事业单位",
+    "workYears allowedValues  : 应届 | 往届无经验 | 1年以下 | 1-3年（满1年） | 3-5年（满3年） | 5-10年（满5年） | 10年及以上",
+    "industry  allowedValues  : 互联网/电商 | 金融/银行/证券/保险 | 企业服务/SaaS | 游戏/传媒/文娱 | 教育/培训 | 医疗健康/生物医药 | 人工智能/数据智能 | 汽车/出行 | 半导体/集成电路 | 通信/物联网/智能硬件 | 物流/供应链 | 航空航天/国防科技 | 制造业/工业自动化/新材料 | 能源/电力/新能源 | 消费品/零售 | 房地产/建筑/物业（最多3个）",
     "confidence 出现维度       : companyBg | skills | industry（education / workYears 不含）",
     "negativeTags dimension   : jobstable=职业稳定性风险 | integrity=诚信与合规风险 | matchRisk=匹配度硬伤 | location=地域相关"
   ],
 
   "taskId": "e39d009b-abd7-42f4-8e64-46b7e26e4b20",
+  "mappingVersion": "ai-resume-parsertag:ID-mapping-tag:V1.0.1-20260806",
   "resumeParseFinishTime": "2026-05-19 11:40:56",
   "tagParseFinishTime": "2026-05-19 11:41:04",
 
@@ -85,51 +86,55 @@
   "positiveTags": {
     "tagsArray": [
       {
+        "dimensionId": "1001",
         "dimension": "education",
-        "displayName": "学历背景",
+        "displayName": "教育背景",
         "value": [
-          { "tag": "985",   "source": "ai" },
-          { "tag": "211",   "source": "ai" },
-          { "tag": "双一流","source": "ai" },
-          { "tag": "硕士",  "source": "ai" }
+          { "tagId": "10010002", "tag": "985",   "source": "rule" },
+          { "tagId": "10010003", "tag": "211",   "source": "rule" },
+          { "tagId": "10010004", "tag": "双一流","source": "rule" },
+          { "tagId": "10010009", "tag": "硕士",  "source": "rule" }
         ]
       },
       {
+        "dimensionId": "1002",
         "dimension": "companyBg",
         "displayName": "公司背景",
         "confidence": 0.95,
         "value": [
-          { "tag": "头部大厂", "source": "ai" },
-          { "tag": "腰部中厂", "source": "ai" }
+          { "tagId": "10020001", "tag": "行业龙头", "source": "hybrid" },
+          { "tagId": "10020010", "tag": "上市公司", "source": "hybrid" }
         ]
       },
       {
+        "dimensionId": "1003",
         "dimension": "workYears",
         "displayName": "工作年限",
         "value": [
-          { "tag": "3-5年", "source": "ai" }
+          { "tagId": "10030005", "tag": "3-5年（满3年）", "source": "rule" }
         ]
       },
       {
+        "dimensionId": "1004",
         "dimension": "skills",
         "displayName": "技能",
         "confidence": 0.92,
         "value": [
-          { "tag": "Java",        "source": "ai" },
-          { "tag": "Spring Boot", "source": "ai" },
-          { "tag": "Spring Cloud","source": "ai" },
-          { "tag": "MySQL",       "source": "ai" },
-          { "tag": "Redis",       "source": "ai" },
-          { "tag": "Kafka",       "source": "ai" }
+          { "tagId": "10040019", "tag": "Java",        "source": "hybrid" },
+          { "tagId": "10040023", "tag": "Spring Boot", "source": "hybrid" },
+          { "tagId": "10040085", "tag": "MySQL",       "source": "hybrid" },
+          { "tagId": "10040082", "tag": "Redis",       "source": "hybrid" }
         ]
       },
       {
+        "dimensionId": "1005",
         "dimension": "industry",
         "displayName": "行业",
         "confidence": 0.92,
         "value": [
-          { "tag": "互联网/电商", "source": "ai" },
-          { "tag": "人工智能",   "source": "ai" }
+          { "tagId": "10050001", "tag": "互联网/电商",       "source": "hybrid" },
+          { "tagId": "10050003", "tag": "企业服务/SaaS",     "source": "hybrid" },
+          { "tagId": "10050007", "tag": "人工智能/数据智能", "source": "hybrid" }
         ]
       }
     ]
@@ -140,62 +145,72 @@
     "deductionScore": -70,
     "tagsArray": [
       {
+        "dimensionId": "2001",
         "dimension": "jobstable",
         "displayName": "职业稳定性风险",
         "value": [
           {
+            "tagId": "20010001",
             "tag": "频繁跳槽",
             "severity": "medium",
             "matchedContent": "近3年内4段工作经历：A公司, B公司, C公司, D公司",
-            "source": "ai"
+            "source": "rule"
           },
           {
+            "tagId": "20010002",
             "tag": "最近任职时长偏短",
             "severity": "medium",
             "matchedContent": "XX科技有限公司 2024-01~2024-03，仅2个月",
-            "source": "ai"
+            "source": "rule"
           },
           {
+            "tagId": "20010003",
             "tag": "工作空窗期过长",
             "severity": "low",
             "matchedContent": "A公司 离职后至 B公司 入职，空窗约8个月",
-            "source": "ai"
+            "source": "rule"
           }
         ]
       },
       {
+        "dimensionId": "2002",
         "dimension": "integrity",
         "displayName": "诚信与合规风险",
         "value": [
           {
+            "tagId": "20020001",
             "tag": "工作时间线重叠",
             "severity": "high",
             "matchedContent": "A公司(2020-01~2022-06) 与 B公司(2022-03~2023-12) 时间重叠3个月",
-            "source": "ai"
+            "source": "rule"
           }
         ]
       },
       {
+        "dimensionId": "2003",
         "dimension": "matchRisk",
         "displayName": "匹配度硬伤",
         "value": [
           {
+            "tagId": "20030001",
             "tag": "疑似培训机构背景",
             "severity": "medium",
             "matchedContent": "教育经历中包含：XX编程训练营",
-            "source": "ai"
+            "source": "rule"
           }
         ]
       },
       {
+        "dimensionId": "2004",
         "dimension": "location",
         "displayName": "地域相关",
         "value": [
           {
-            "tag": "湖南娄底",
+            "tagId": "20040001",
+            "tag": "敏感地域",
             "severity": "high",
-            "matchedContent": "籍贯：湖南娄底",
-            "source": "ai"
+            "matchedContent": "命中“广西”：...广西南宁...",
+            "source": "rule"
           }
         ]
       }

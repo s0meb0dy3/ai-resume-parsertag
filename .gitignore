@@ -20,6 +20,7 @@ results/
 
 # 本地素材（不入库）
 localmaterial/
+evaluation/private/
 
 # 测试 PDF 文件
 test_full/

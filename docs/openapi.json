@@ -1,0 +1,4518 @@
+{
+  "components": {
+    "schemas": {
+      "AddNegativeDimensionBody": {
+        "description": "新增负向维度。\n\ndetectionType 控制检测方式：\n  rule（默认）：关键词规则匹配，rules 中每条规则需提供 keywords + 可选 searchIn\n  llm         ：大模型语义检测，rules 中每条规则需提供 description 描述检测标准",
+        "properties": {
+          "detectionType": {
+            "default": "rule",
+            "description": "检测方式：rule=关键词规则 / llm=大模型语义",
+            "enum": [
+              "rule",
+              "llm"
+            ],
+            "title": "Detectiontype",
+            "type": "string"
+          },
+          "dimension": {
+            "description": "维度标识，全局唯一，建议英文",
+            "minLength": 1,
+            "title": "Dimension",
+            "type": "string"
+          },
+          "displayName": {
+            "default": "",
+            "description": "展示名称，默认同 dimension",
+            "title": "Displayname",
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "description": "是否启用",
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "rules": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "规则字典，key 为 ruleKey",
+            "title": "Rules"
+          }
+        },
+        "required": [
+          "dimension"
+        ],
+        "title": "AddNegativeDimensionBody",
+        "type": "object"
+      },
+      "AddNegativeRuleBody": {
+        "additionalProperties": true,
+        "description": "其他字段（keywords / pattern / matchFields 等）通过 extra=\"allow\" 透传存入 rules。",
+        "properties": {
+          "enabled": {
+            "default": true,
+            "description": "是否启用",
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "ruleKey": {
+            "description": "规则唯一标识，建议英文",
+            "minLength": 1,
+            "title": "Rulekey",
+            "type": "string"
+          },
+          "severity": {
+            "default": "medium",
+            "description": "风险等级：low / medium / high",
+            "pattern": "^(low|medium|high)$",
+            "title": "Severity",
+            "type": "string"
+          },
+          "tagName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "标签展示名称，默认同 ruleKey",
+            "title": "Tagname"
+          }
+        },
+        "required": [
+          "ruleKey"
+        ],
+        "title": "AddNegativeRuleBody",
+        "type": "object"
+      },
+      "AddPositiveDimensionBody": {
+        "description": "定义新增正向标签维度的名称、开关和候选值。",
+        "properties": {
+          "allowedValues": {
+            "description": "允许值枚举，空列表表示不限",
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowedvalues",
+            "type": "array"
+          },
+          "dimension": {
+            "description": "维度标识，全局唯一，建议英文",
+            "minLength": 1,
+            "title": "Dimension",
+            "type": "string"
+          },
+          "displayName": {
+            "default": "",
+            "description": "展示名称，默认同 dimension",
+            "title": "Displayname",
+            "type": "string"
+          },
+          "enabled": {
+            "default": true,
+            "description": "是否启用",
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "dimension"
+        ],
+        "title": "AddPositiveDimensionBody",
+        "type": "object"
+      },
+      "AsyncBatchRequest": {
+        "description": "POST /api/resume/async/batch 和 /api/resume/async/batch/parse 请求体。\n单次最多 20 份，仅支持 type=url；文件支持 PDF、DOCX、JPG、JPEG、PNG。",
+        "properties": {
+          "jobDescription": {
+            "default": "",
+            "description": "岗位 JD",
+            "title": "Jobdescription",
+            "type": "string"
+          },
+          "jobSensitiveWords": {
+            "default": "",
+            "description": "风险关键词，逗号分隔",
+            "title": "Jobsensitivewords",
+            "type": "string"
+          },
+          "jobTitle": {
+            "default": "",
+            "description": "岗位名称",
+            "title": "Jobtitle",
+            "type": "string"
+          },
+          "requiredSkills": {
+            "default": "",
+            "description": "技能要求，逗号分隔",
+            "title": "Requiredskills",
+            "type": "string"
+          },
+          "resumes": {
+            "description": "简历列表，每项必须含 type=url 和 file.path",
+            "items": {
+              "$ref": "#/components/schemas/ResumeUrlItem"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Resumes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "resumes"
+        ],
+        "title": "AsyncBatchRequest",
+        "type": "object"
+      },
+      "AsyncBatchSubmissionResponse": {
+        "description": "表示异步批量提交统计及任务列表。",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "integer"
+          },
+          "estimatedSeconds": {
+            "title": "Estimatedseconds",
+            "type": "integer"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "msg": {
+            "title": "Msg",
+            "type": "string"
+          },
+          "submitted": {
+            "title": "Submitted",
+            "type": "integer"
+          },
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/AsyncBatchTask"
+            },
+            "title": "Tasks",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "code",
+          "msg",
+          "total",
+          "submitted",
+          "failed",
+          "estimatedSeconds",
+          "tasks"
+        ],
+        "title": "AsyncBatchSubmissionResponse",
+        "type": "object"
+      },
+      "AsyncBatchTask": {
+        "description": "表示异步批量提交中的单份文件结果。",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "integer"
+          },
+          "extra": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "msg": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Msg"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "enum": [
+                  0,
+                  1,
+                  2,
+                  3,
+                  4
+                ],
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "statusDesc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Statusdesc"
+          },
+          "taskId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Taskid"
+          }
+        },
+        "required": [
+          "filename",
+          "code"
+        ],
+        "title": "AsyncBatchTask",
+        "type": "object"
+      },
+      "AsyncTagBatchRequest": {
+        "description": "POST /api/resume/async/batch/tag 请求体。\n单次最多 20 份，resume 字段必须是已解析的结构化 JSON。",
+        "properties": {
+          "jobDescription": {
+            "default": "",
+            "description": "岗位 JD",
+            "title": "Jobdescription",
+            "type": "string"
+          },
+          "jobSensitiveWords": {
+            "default": "",
+            "description": "风险关键词，逗号分隔",
+            "title": "Jobsensitivewords",
+            "type": "string"
+          },
+          "jobTitle": {
+            "default": "",
+            "description": "岗位名称",
+            "title": "Jobtitle",
+            "type": "string"
+          },
+          "requiredSkills": {
+            "default": "",
+            "description": "技能要求，逗号分隔",
+            "title": "Requiredskills",
+            "type": "string"
+          },
+          "resumes": {
+            "description": "已解析简历列表，每项须含 resume 字段",
+            "items": {
+              "$ref": "#/components/schemas/ParsedResumeItem"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Resumes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "resumes"
+        ],
+        "title": "AsyncTagBatchRequest",
+        "type": "object"
+      },
+      "BatchTaskItemResponse": {
+        "description": "表示同步解析与打标批次中的单项结果。",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/TaskStatusData"
+          },
+          "msg": {
+            "title": "Msg",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "msg",
+          "data"
+        ],
+        "title": "BatchTaskItemResponse",
+        "type": "object"
+      },
+      "Body_async_batch_parse_multiform_api_resume_async_batch_multiform_post": {
+        "properties": {
+          "files": {
+            "anyOf": [
+              {
+                "items": {
+                  "contentMediaType": "application/octet-stream",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Files"
+          },
+          "jobDescription": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jobdescription"
+          },
+          "jobSensitiveWords": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jobsensitivewords"
+          },
+          "jobTitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jobtitle"
+          },
+          "requiredSkills": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requiredskills"
+          },
+          "resumes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resumes"
+          }
+        },
+        "title": "Body_async_batch_parse_multiform_api_resume_async_batch_multiform_post",
+        "type": "object"
+      },
+      "Body_async_parse_resume_api_resume_async_parse_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          },
+          "jobDescription": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jobdescription"
+          },
+          "jobSensitiveWords": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jobsensitivewords"
+          },
+          "jobTitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Jobtitle"
+          },
+          "requestId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requestid"
+          },
+          "requiredSkills": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requiredskills"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_async_parse_resume_api_resume_async_parse_post",
+        "type": "object"
+      },
+      "BusinessErrorResponse": {
+        "description": "表示使用业务错误码返回的通用失败响应。",
+        "properties": {
+          "code": {
+            "description": "非零业务错误码",
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "description": "错误附加数据，通常为空",
+            "title": "Data"
+          },
+          "msg": {
+            "description": "可直接展示或记录的错误信息",
+            "title": "Msg",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "msg"
+        ],
+        "title": "BusinessErrorResponse",
+        "type": "object"
+      },
+      "Candidate": {
+        "description": "定义候选人基础信息的稳定字段和默认值。",
+        "properties": {
+          "address": {
+            "default": "",
+            "title": "Address",
+            "type": "string"
+          },
+          "age": {
+            "default": 0,
+            "title": "Age",
+            "type": "integer"
+          },
+          "email": {
+            "default": "",
+            "title": "Email",
+            "type": "string"
+          },
+          "expectedPosition": {
+            "default": "",
+            "title": "Expectedposition",
+            "type": "string"
+          },
+          "expectedSalary": {
+            "default": "",
+            "title": "Expectedsalary",
+            "type": "string"
+          },
+          "gender": {
+            "default": 0,
+            "title": "Gender",
+            "type": "integer"
+          },
+          "name": {
+            "default": "",
+            "title": "Name",
+            "type": "string"
+          },
+          "nativePlace": {
+            "default": "",
+            "title": "Nativeplace",
+            "type": "string"
+          },
+          "phone": {
+            "default": "",
+            "title": "Phone",
+            "type": "string"
+          },
+          "selfEvaluation": {
+            "default": "",
+            "title": "Selfevaluation",
+            "type": "string"
+          }
+        },
+        "title": "Candidate",
+        "type": "object"
+      },
+      "ChatChoice": {
+        "description": "表示 OpenAI completion 的单个候选结果。",
+        "properties": {
+          "finish_reason": {
+            "title": "Finish Reason",
+            "type": "string"
+          },
+          "index": {
+            "title": "Index",
+            "type": "integer"
+          },
+          "message": {
+            "$ref": "#/components/schemas/ChatMessageResponse"
+          }
+        },
+        "required": [
+          "index",
+          "message",
+          "finish_reason"
+        ],
+        "title": "ChatChoice",
+        "type": "object"
+      },
+      "ChatCompletionRequest": {
+        "description": "定义简历解析场景使用的 Chat Completions 兼容请求。\n\n`model` 决定仅解析或解析加打标，`async_mode` 仅对单文件生效。\n批量 content 使用 `max_concurrency` 限制本次请求内的并发数。",
+        "examples": [
+          {
+            "summary": "单份解析 —— URL 方式",
+            "value": {
+              "messages": [
+                {
+                  "content": [
+                    {
+                      "file": {
+                        "name": "张三.pdf",
+                        "path": "http://10.2.5.121:9000/bucket/张三.pdf"
+                      },
+                      "type": "url"
+                    }
+                  ],
+                  "role": "user"
+                }
+              ],
+              "model": "DeepSeek-OCR",
+              "stream": false
+            }
+          },
+          {
+            "summary": "单份解析 —— 服务器本地文件",
+            "value": {
+              "messages": [
+                {
+                  "content": [
+                    {
+                      "file": {
+                        "name": "张三.pdf",
+                        "path": "/app/uploads/张三.pdf"
+                      },
+                      "type": "file"
+                    }
+                  ],
+                  "role": "user"
+                }
+              ],
+              "model": "DeepSeek-OCR",
+              "stream": false
+            }
+          },
+          {
+            "summary": "单份解析+打标 —— 异步模式",
+            "value": {
+              "async_mode": true,
+              "messages": [
+                {
+                  "content": [
+                    {
+                      "file": {
+                        "name": "张三.pdf",
+                        "path": "http://10.2.5.121:9000/bucket/张三.pdf"
+                      },
+                      "type": "url"
+                    }
+                  ],
+                  "role": "user"
+                }
+              ],
+              "model": "DeepSeek-OCR-JSON"
+            }
+          }
+        ],
+        "properties": {
+          "async_mode": {
+            "default": false,
+            "description": "异步模式（仅单份模式生效）。\n\n`false`（默认）：阻塞等待解析完成，`content` 直接返回简历 JSON 字符串。\n\n`true`：立即返回，`content` 为 `{taskId, status, estimatedSeconds}` JSON 字符串，通过 `GET /api/resume/async/result?taskId=xxx` 轮询结果。",
+            "title": "Async Mode",
+            "type": "boolean"
+          },
+          "jobDescription": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "",
+            "description": "岗位详细描述",
+            "title": "Jobdescription"
+          },
+          "jobSensitiveWords": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "",
+            "description": "岗位敏感词，用于风险打标",
+            "title": "Jobsensitivewords"
+          },
+          "jobTitle": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "",
+            "description": "岗位名称，用于打标时的岗位匹配（仅 DeepSeek-OCR-JSON 生效）",
+            "title": "Jobtitle"
+          },
+          "max_concurrency": {
+            "default": 24,
+            "description": "批量模式并发上限，取值 1~30，默认 24。单份模式忽略此参数",
+            "maximum": 30.0,
+            "minimum": 1.0,
+            "title": "Max Concurrency",
+            "type": "integer"
+          },
+          "messages": {
+            "description": "消息列表，取最后一条 role=user 的消息的 content 数组作为文件输入。\n\n**单份模式**：content 中放 1 个文件 item，返回单份简历 JSON 对象字符串。\n\n**批量模式**：content 中放多个文件 item，服务端自动并发解析全部文件，返回 JSON 数组字符串（每项含 index / filename / success / result / elapsed_s / error）。",
+            "items": {
+              "$ref": "#/components/schemas/_ChatMessage"
+            },
+            "title": "Messages",
+            "type": "array"
+          },
+          "model": {
+            "default": "DeepSeek-OCR",
+            "description": "模型名称：`DeepSeek-OCR`（仅解析）或 `DeepSeek-OCR-JSON`（解析+打标，兼容别名）",
+            "title": "Model",
+            "type": "string"
+          },
+          "requiredSkills": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "",
+            "description": "岗位要求技能，逗号分隔",
+            "title": "Requiredskills"
+          },
+          "stream": {
+            "default": false,
+            "description": "是否启用 SSE 流式返回。`true` 时以 `text/event-stream` 格式推送；`false` 时一次性返回",
+            "title": "Stream",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "messages"
+        ],
+        "title": "ChatCompletionRequest",
+        "type": "object"
+      },
+      "ChatCompletionResponse": {
+        "description": "表示非流式 OpenAI Chat Completions 响应。",
+        "properties": {
+          "choices": {
+            "items": {
+              "$ref": "#/components/schemas/ChatChoice"
+            },
+            "title": "Choices",
+            "type": "array"
+          },
+          "created": {
+            "title": "Created",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "object": {
+            "const": "chat.completion",
+            "title": "Object",
+            "type": "string"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/ChatUsage"
+          }
+        },
+        "required": [
+          "id",
+          "object",
+          "created",
+          "model",
+          "choices",
+          "usage"
+        ],
+        "title": "ChatCompletionResponse",
+        "type": "object"
+      },
+      "ChatMessageResponse": {
+        "description": "表示 OpenAI completion 返回的助手消息。",
+        "properties": {
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "role": {
+            "const": "assistant",
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "content"
+        ],
+        "title": "ChatMessageResponse",
+        "type": "object"
+      },
+      "ChatUsage": {
+        "description": "表示兼容接口返回的 token 统计。",
+        "properties": {
+          "completion_tokens": {
+            "title": "Completion Tokens",
+            "type": "integer"
+          },
+          "prompt_tokens": {
+            "title": "Prompt Tokens",
+            "type": "integer"
+          },
+          "total_tokens": {
+            "title": "Total Tokens",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "prompt_tokens",
+          "completion_tokens",
+          "total_tokens"
+        ],
+        "title": "ChatUsage",
+        "type": "object"
+      },
+      "Education": {
+        "description": "定义单条教育背景的学校、专业、学位、学历和时间字段。",
+        "properties": {
+          "degree": {
+            "default": "",
+            "title": "Degree",
+            "type": "string"
+          },
+          "education": {
+            "default": "",
+            "title": "Education",
+            "type": "string"
+          },
+          "endDate": {
+            "default": "",
+            "title": "Enddate",
+            "type": "string"
+          },
+          "major": {
+            "default": "",
+            "title": "Major",
+            "type": "string"
+          },
+          "school": {
+            "default": "",
+            "title": "School",
+            "type": "string"
+          },
+          "startDate": {
+            "default": "",
+            "title": "Startdate",
+            "type": "string"
+          }
+        },
+        "title": "Education",
+        "type": "object"
+      },
+      "FileMeta": {
+        "description": "URL 简历的文件标识、下载地址和业务透传信息。",
+        "properties": {
+          "extra": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "调用方业务标识，结果查询时原样返回",
+            "title": "Extra"
+          },
+          "name": {
+            "default": "resume.pdf",
+            "description": "文件名，用于日志和结果标识",
+            "title": "Name",
+            "type": "string"
+          },
+          "path": {
+            "default": "",
+            "description": "可访问的 HTTP/HTTPS 下载链接",
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "title": "FileMeta",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HealthResponse": {
+        "description": "表示进程存活探针响应。",
+        "properties": {
+          "status": {
+            "const": "healthy",
+            "title": "Status",
+            "type": "string"
+          },
+          "timestamp": {
+            "description": "服务本地 ISO 8601 时间",
+            "title": "Timestamp",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "timestamp"
+        ],
+        "title": "HealthResponse",
+        "type": "object"
+      },
+      "HttpDetailErrorResponse": {
+        "description": "表示 FastAPI `HTTPException` 生成的标准错误响应。",
+        "properties": {
+          "detail": {
+            "description": "HTTP 错误详情",
+            "title": "Detail",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "HttpDetailErrorResponse",
+        "type": "object"
+      },
+      "HttpErrorResponse": {
+        "description": "表示使用 HTTP 4xx 返回的简单错误响应。",
+        "properties": {
+          "error": {
+            "description": "错误原因",
+            "title": "Error",
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "HttpErrorResponse",
+        "type": "object"
+      },
+      "ModelInfo": {
+        "description": "表示 OpenAI 模型列表中的单个逻辑模型。",
+        "properties": {
+          "created": {
+            "title": "Created",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "object": {
+            "const": "model",
+            "title": "Object",
+            "type": "string"
+          },
+          "owned_by": {
+            "title": "Owned By",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "object",
+          "created",
+          "owned_by"
+        ],
+        "title": "ModelInfo",
+        "type": "object"
+      },
+      "ModelListResponse": {
+        "description": "表示 OpenAI SDK 兼容的模型列表响应。",
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/ModelInfo"
+            },
+            "title": "Data",
+            "type": "array"
+          },
+          "object": {
+            "const": "list",
+            "title": "Object",
+            "type": "string"
+          }
+        },
+        "required": [
+          "object",
+          "data"
+        ],
+        "title": "ModelListResponse",
+        "type": "object"
+      },
+      "NegativeDimensionConfig": {
+        "description": "表示运行时负向维度配置。",
+        "properties": {
+          "detectionType": {
+            "default": "rule",
+            "description": "检测类型；旧配置省略时按 rule 处理",
+            "title": "Detectiontype",
+            "type": "string"
+          },
+          "dimension": {
+            "title": "Dimension",
+            "type": "string"
+          },
+          "displayName": {
+            "title": "Displayname",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "rules": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/NegativeRuleConfig"
+            },
+            "title": "Rules",
+            "type": "object"
+          }
+        },
+        "required": [
+          "dimension",
+          "displayName",
+          "enabled",
+          "rules"
+        ],
+        "title": "NegativeDimensionConfig",
+        "type": "object"
+      },
+      "NegativeRuleConfig": {
+        "additionalProperties": true,
+        "description": "表示字段随检测类型变化的负向规则配置。",
+        "properties": {},
+        "title": "NegativeRuleConfig",
+        "type": "object"
+      },
+      "NegativeTagDimension": {
+        "description": "表示最终响应中的一个风险标签维度。",
+        "properties": {
+          "dimension": {
+            "title": "Dimension",
+            "type": "string"
+          },
+          "dimensionId": {
+            "title": "Dimensionid",
+            "type": "string"
+          },
+          "displayName": {
+            "title": "Displayname",
+            "type": "string"
+          },
+          "value": {
+            "items": {
+              "$ref": "#/components/schemas/NegativeTagValue"
+            },
+            "title": "Value",
+            "type": "array"
+          }
+        },
+        "required": [
+          "dimensionId",
+          "dimension",
+          "displayName"
+        ],
+        "title": "NegativeTagDimension",
+        "type": "object"
+      },
+      "NegativeTagValue": {
+        "description": "表示单个风险标签、等级和命中证据。",
+        "properties": {
+          "matchedContent": {
+            "title": "Matchedcontent",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "rule",
+              "llm",
+              "hybrid"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "tag": {
+            "title": "Tag",
+            "type": "string"
+          },
+          "tagId": {
+            "title": "Tagid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tagId",
+          "tag",
+          "severity",
+          "matchedContent",
+          "source"
+        ],
+        "title": "NegativeTagValue",
+        "type": "object"
+      },
+      "NegativeTags": {
+        "description": "表示风险命中统计和分维度明细。",
+        "properties": {
+          "deductionScore": {
+            "default": 0,
+            "title": "Deductionscore",
+            "type": "integer"
+          },
+          "hitCount": {
+            "default": 0,
+            "title": "Hitcount",
+            "type": "integer"
+          },
+          "tagsArray": {
+            "items": {
+              "$ref": "#/components/schemas/NegativeTagDimension"
+            },
+            "title": "Tagsarray",
+            "type": "array"
+          }
+        },
+        "title": "NegativeTags",
+        "type": "object"
+      },
+      "ParsedResumeItem": {
+        "description": "已解析简历及其元数据，作为仅打标接口的输入。",
+        "properties": {
+          "extra": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "调用方业务标识",
+            "title": "Extra"
+          },
+          "filename": {
+            "default": "resume.pdf",
+            "description": "文件名",
+            "title": "Filename",
+            "type": "string"
+          },
+          "resume": {
+            "$ref": "#/components/schemas/ResumeData",
+            "description": "解析后的结构化简历 JSON"
+          },
+          "resumeParseFinishTime": {
+            "default": "",
+            "description": "解析完成时间",
+            "title": "Resumeparsefinishtime",
+            "type": "string"
+          }
+        },
+        "required": [
+          "resume"
+        ],
+        "title": "ParsedResumeItem",
+        "type": "object"
+      },
+      "ParsedResumeResult": {
+        "description": "表示仅解析异步任务可直接传给仅打标接口的结果。",
+        "properties": {
+          "extra": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "resume": {
+            "$ref": "#/components/schemas/ResumeData"
+          },
+          "resumeParseFinishTime": {
+            "title": "Resumeparsefinishtime",
+            "type": "string"
+          }
+        },
+        "required": [
+          "filename",
+          "resumeParseFinishTime",
+          "resume"
+        ],
+        "title": "ParsedResumeResult",
+        "type": "object"
+      },
+      "PositiveAlgorithmResponse": {
+        "description": "表示内部正向标签算法的原始结果。",
+        "properties": {
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "positiveTags": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Positivetags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "positiveTags",
+          "confidence"
+        ],
+        "title": "PositiveAlgorithmResponse",
+        "type": "object"
+      },
+      "PositiveDimensionConfig": {
+        "description": "表示运行时正向维度配置。",
+        "properties": {
+          "allowedValues": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowedvalues",
+            "type": "array"
+          },
+          "dimension": {
+            "title": "Dimension",
+            "type": "string"
+          },
+          "displayName": {
+            "title": "Displayname",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "dimension",
+          "displayName",
+          "enabled",
+          "allowedValues"
+        ],
+        "title": "PositiveDimensionConfig",
+        "type": "object"
+      },
+      "PositiveTagDimension": {
+        "description": "表示最终响应中的一个正向标签维度。",
+        "properties": {
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "dimension": {
+            "title": "Dimension",
+            "type": "string"
+          },
+          "dimensionId": {
+            "title": "Dimensionid",
+            "type": "string"
+          },
+          "displayName": {
+            "title": "Displayname",
+            "type": "string"
+          },
+          "value": {
+            "items": {
+              "$ref": "#/components/schemas/PositiveTagValue"
+            },
+            "title": "Value",
+            "type": "array"
+          }
+        },
+        "required": [
+          "dimensionId",
+          "dimension",
+          "displayName"
+        ],
+        "title": "PositiveTagDimension",
+        "type": "object"
+      },
+      "PositiveTagValue": {
+        "description": "表示单个正向标签值及其来源。",
+        "properties": {
+          "source": {
+            "enum": [
+              "rule",
+              "llm",
+              "hybrid"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "tag": {
+            "title": "Tag",
+            "type": "string"
+          },
+          "tagId": {
+            "title": "Tagid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tagId",
+          "tag",
+          "source"
+        ],
+        "title": "PositiveTagValue",
+        "type": "object"
+      },
+      "PositiveTags": {
+        "description": "表示固定顺序输出的正向标签集合。",
+        "properties": {
+          "tagsArray": {
+            "items": {
+              "$ref": "#/components/schemas/PositiveTagDimension"
+            },
+            "title": "Tagsarray",
+            "type": "array"
+          }
+        },
+        "title": "PositiveTags",
+        "type": "object"
+      },
+      "Project": {
+        "description": "定义单条项目经历的归属公司、项目、角色、描述和时间字段。",
+        "properties": {
+          "company": {
+            "default": "",
+            "title": "Company",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "endDate": {
+            "default": "",
+            "title": "Enddate",
+            "type": "string"
+          },
+          "projectName": {
+            "default": "",
+            "title": "Projectname",
+            "type": "string"
+          },
+          "role": {
+            "default": "",
+            "title": "Role",
+            "type": "string"
+          },
+          "startDate": {
+            "default": "",
+            "title": "Startdate",
+            "type": "string"
+          }
+        },
+        "title": "Project",
+        "type": "object"
+      },
+      "ResumeData": {
+        "description": "定义所有解析和打标入口接受的标准简历 JSON。",
+        "properties": {
+          "candidate": {
+            "$ref": "#/components/schemas/Candidate"
+          },
+          "educations": {
+            "items": {
+              "$ref": "#/components/schemas/Education"
+            },
+            "title": "Educations",
+            "type": "array"
+          },
+          "projects": {
+            "items": {
+              "$ref": "#/components/schemas/Project"
+            },
+            "title": "Projects",
+            "type": "array"
+          },
+          "works": {
+            "items": {
+              "$ref": "#/components/schemas/Work"
+            },
+            "title": "Works",
+            "type": "array"
+          }
+        },
+        "title": "ResumeData",
+        "type": "object"
+      },
+      "ResumeUrlItem": {
+        "description": "限定 `type=url` 的异步多格式简历条目。",
+        "properties": {
+          "extra": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "顶层 extra，优先级低于 file.extra",
+            "title": "Extra"
+          },
+          "file": {
+            "$ref": "#/components/schemas/FileMeta"
+          },
+          "type": {
+            "const": "url",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "ResumeUrlItem",
+        "type": "object"
+      },
+      "SensitiveAlgorithmResponse": {
+        "description": "表示内部规则风险检测结果。",
+        "properties": {
+          "deductionScore": {
+            "title": "Deductionscore",
+            "type": "integer"
+          },
+          "hitCount": {
+            "title": "Hitcount",
+            "type": "integer"
+          },
+          "hitTags": {
+            "items": {
+              "$ref": "#/components/schemas/SensitiveHitGroup"
+            },
+            "title": "Hittags",
+            "type": "array"
+          }
+        },
+        "required": [
+          "hitTags",
+          "hitCount",
+          "deductionScore"
+        ],
+        "title": "SensitiveAlgorithmResponse",
+        "type": "object"
+      },
+      "SensitiveHit": {
+        "additionalProperties": true,
+        "description": "表示内部风险检测的一条命中。",
+        "properties": {
+          "matchedContent": {
+            "title": "Matchedcontent",
+            "type": "string"
+          },
+          "severity": {
+            "title": "Severity",
+            "type": "string"
+          },
+          "tag": {
+            "title": "Tag",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tag",
+          "severity",
+          "matchedContent"
+        ],
+        "title": "SensitiveHit",
+        "type": "object"
+      },
+      "SensitiveHitGroup": {
+        "description": "表示内部风险检测的分类命中集合。",
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "hits": {
+            "items": {
+              "$ref": "#/components/schemas/SensitiveHit"
+            },
+            "title": "Hits",
+            "type": "array"
+          }
+        },
+        "required": [
+          "category",
+          "hits"
+        ],
+        "title": "SensitiveHitGroup",
+        "type": "object"
+      },
+      "SyncBatchRequest": {
+        "description": "POST /api/resume/sync/batch 和 /api/resume/sync/parse 请求体。\nresumes 支持 type=url/file/base64，item 结构灵活，由 get_document_source_from_content 解析。",
+        "properties": {
+          "jobDescription": {
+            "default": "",
+            "description": "岗位 JD",
+            "title": "Jobdescription",
+            "type": "string"
+          },
+          "jobSensitiveWords": {
+            "default": "",
+            "description": "风险关键词，逗号分隔",
+            "title": "Jobsensitivewords",
+            "type": "string"
+          },
+          "jobTitle": {
+            "default": "",
+            "description": "岗位名称",
+            "title": "Jobtitle",
+            "type": "string"
+          },
+          "max_concurrency": {
+            "anyOf": [
+              {
+                "maximum": 30.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "并发上限（1~30）",
+            "title": "Max Concurrency"
+          },
+          "requiredSkills": {
+            "default": "",
+            "description": "技能要求，逗号分隔",
+            "title": "Requiredskills",
+            "type": "string"
+          },
+          "resumes": {
+            "description": "PDF/DOCX/JPEG/PNG 简历列表，支持 url / file / base64",
+            "items": {},
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Resumes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "resumes"
+        ],
+        "title": "SyncBatchRequest",
+        "type": "object"
+      },
+      "SyncBatchResponse": {
+        "description": "表示同步解析与打标或仅打标的批量响应。",
+        "properties": {
+          "elapsed_s": {
+            "title": "Elapsed S",
+            "type": "number"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/BatchTaskItemResponse"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "success": {
+            "title": "Success",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "success",
+          "failed",
+          "elapsed_s",
+          "results"
+        ],
+        "title": "SyncBatchResponse",
+        "type": "object"
+      },
+      "SyncParseBatchResponse": {
+        "description": "表示同步仅解析的批量统计和结果。",
+        "properties": {
+          "elapsed_s": {
+            "title": "Elapsed S",
+            "type": "number"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/SyncParseItemResponse"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "success": {
+            "title": "Success",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "success",
+          "failed",
+          "elapsed_s",
+          "results"
+        ],
+        "title": "SyncParseBatchResponse",
+        "type": "object"
+      },
+      "SyncParseItemData": {
+        "description": "表示同步仅解析单项的成功或失败数据。",
+        "properties": {
+          "errorMsg": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Errormsg"
+          },
+          "extra": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          },
+          "resume": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ResumeData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resumeParseFinishTime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resumeparsefinishtime"
+          }
+        },
+        "required": [
+          "filename"
+        ],
+        "title": "SyncParseItemData",
+        "type": "object"
+      },
+      "SyncParseItemResponse": {
+        "description": "表示同步仅解析批次中的单项响应。",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/SyncParseItemData"
+          },
+          "msg": {
+            "title": "Msg",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "msg",
+          "data"
+        ],
+        "title": "SyncParseItemResponse",
+        "type": "object"
+      },
+      "SyncTagRequest": {
+        "description": "POST /api/resume/sync/tag 请求体。\n单次最多 50 份，resume 字段必须是已解析的结构化 JSON。",
+        "properties": {
+          "jobDescription": {
+            "default": "",
+            "description": "岗位 JD",
+            "title": "Jobdescription",
+            "type": "string"
+          },
+          "jobSensitiveWords": {
+            "default": "",
+            "description": "风险关键词，逗号分隔",
+            "title": "Jobsensitivewords",
+            "type": "string"
+          },
+          "jobTitle": {
+            "default": "",
+            "description": "岗位名称",
+            "title": "Jobtitle",
+            "type": "string"
+          },
+          "max_concurrency": {
+            "anyOf": [
+              {
+                "maximum": 30.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "并发上限（1~30）",
+            "title": "Max Concurrency"
+          },
+          "requiredSkills": {
+            "default": "",
+            "description": "技能要求，逗号分隔",
+            "title": "Requiredskills",
+            "type": "string"
+          },
+          "resumes": {
+            "description": "已解析简历列表",
+            "items": {
+              "$ref": "#/components/schemas/ParsedResumeItem"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Resumes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "resumes"
+        ],
+        "title": "SyncTagRequest",
+        "type": "object"
+      },
+      "TagConfigData": {
+        "description": "表示完整运行时标签配置和读取时间。",
+        "properties": {
+          "mappingVersion": {
+            "title": "Mappingversion",
+            "type": "string"
+          },
+          "negativeDimensions": {
+            "items": {
+              "$ref": "#/components/schemas/NegativeDimensionConfig"
+            },
+            "title": "Negativedimensions",
+            "type": "array"
+          },
+          "positiveDimensions": {
+            "items": {
+              "$ref": "#/components/schemas/PositiveDimensionConfig"
+            },
+            "title": "Positivedimensions",
+            "type": "array"
+          },
+          "severityDeduction": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Severitydeduction",
+            "type": "object"
+          },
+          "updatedAt": {
+            "title": "Updatedat",
+            "type": "string"
+          }
+        },
+        "required": [
+          "positiveDimensions",
+          "negativeDimensions",
+          "severityDeduction",
+          "mappingVersion",
+          "updatedAt"
+        ],
+        "title": "TagConfigData",
+        "type": "object"
+      },
+      "TagConfigResponse": {
+        "description": "表示标签配置查询或更新成功响应。",
+        "properties": {
+          "code": {
+            "const": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/TagConfigData"
+          },
+          "msg": {
+            "title": "Msg",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "msg",
+          "data"
+        ],
+        "title": "TagConfigResponse",
+        "type": "object"
+      },
+      "TagMappingData": {
+        "description": "表示当前完整映射快照及其内容版本。",
+        "properties": {
+          "dimensions": {
+            "items": {
+              "$ref": "#/components/schemas/TagMappingDimension"
+            },
+            "title": "Dimensions",
+            "type": "array"
+          },
+          "mappingVersion": {
+            "title": "Mappingversion",
+            "type": "string"
+          },
+          "mappings": {
+            "items": {
+              "$ref": "#/components/schemas/TagMappingValue"
+            },
+            "title": "Mappings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "mappingVersion",
+          "dimensions",
+          "mappings"
+        ],
+        "title": "TagMappingData",
+        "type": "object"
+      },
+      "TagMappingDimension": {
+        "description": "表示稳定维度代码、展示名和四位维度 ID。",
+        "properties": {
+          "dimension": {
+            "title": "Dimension",
+            "type": "string"
+          },
+          "displayName": {
+            "title": "Displayname",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "dimension",
+          "displayName"
+        ],
+        "title": "TagMappingDimension",
+        "type": "object"
+      },
+      "TagMappingResponse": {
+        "description": "表示标签 ID 映射查询成功响应。",
+        "properties": {
+          "code": {
+            "const": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/TagMappingData"
+          },
+          "msg": {
+            "title": "Msg",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "msg",
+          "data"
+        ],
+        "title": "TagMappingResponse",
+        "type": "object"
+      },
+      "TagMappingValue": {
+        "description": "表示一个标签值及其稳定 ID、别名和可选负向规则键。",
+        "properties": {
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Aliases",
+            "type": "array"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "dimension": {
+            "title": "Dimension",
+            "type": "string"
+          },
+          "dimensionId": {
+            "title": "Dimensionid",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "ruleKey": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rulekey"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "dimensionId",
+          "dimension",
+          "value",
+          "aliases"
+        ],
+        "title": "TagMappingValue",
+        "type": "object"
+      },
+      "TaggedResumeResult": {
+        "description": "表示解析与打标完成后的公共结果对象。",
+        "properties": {
+          "candidate": {
+            "$ref": "#/components/schemas/Candidate"
+          },
+          "educations": {
+            "items": {
+              "$ref": "#/components/schemas/Education"
+            },
+            "title": "Educations",
+            "type": "array"
+          },
+          "mappingVersion": {
+            "title": "Mappingversion",
+            "type": "string"
+          },
+          "negativeTags": {
+            "$ref": "#/components/schemas/NegativeTags"
+          },
+          "positiveTags": {
+            "$ref": "#/components/schemas/PositiveTags"
+          },
+          "projects": {
+            "items": {
+              "$ref": "#/components/schemas/Project"
+            },
+            "title": "Projects",
+            "type": "array"
+          },
+          "resumeParseFinishTime": {
+            "title": "Resumeparsefinishtime",
+            "type": "string"
+          },
+          "tagParseFinishTime": {
+            "title": "Tagparsefinishtime",
+            "type": "string"
+          },
+          "taskId": {
+            "title": "Taskid",
+            "type": "string"
+          },
+          "works": {
+            "items": {
+              "$ref": "#/components/schemas/Work"
+            },
+            "title": "Works",
+            "type": "array"
+          }
+        },
+        "required": [
+          "taskId",
+          "mappingVersion",
+          "resumeParseFinishTime",
+          "tagParseFinishTime",
+          "positiveTags",
+          "negativeTags"
+        ],
+        "title": "TaggedResumeResult",
+        "type": "object"
+      },
+      "TaskListData": {
+        "description": "表示当前进程内任务数量和摘要列表。",
+        "properties": {
+          "tasks": {
+            "items": {
+              "$ref": "#/components/schemas/TaskListItem"
+            },
+            "title": "Tasks",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "tasks"
+        ],
+        "title": "TaskListData",
+        "type": "object"
+      },
+      "TaskListItem": {
+        "description": "表示任务总览接口中的单项摘要。",
+        "properties": {
+          "candidateName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Candidatename"
+          },
+          "completedAt": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completedat"
+          },
+          "createdAt": {
+            "title": "Createdat",
+            "type": "string"
+          },
+          "elapsedSeconds": {
+            "title": "Elapsedseconds",
+            "type": "number"
+          },
+          "errorMsg": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Errormsg"
+          },
+          "extra": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaggedResumeResult"
+              },
+              {
+                "$ref": "#/components/schemas/ParsedResumeResult"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          },
+          "resumeParseTime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resumeparsetime"
+          },
+          "status": {
+            "enum": [
+              0,
+              1,
+              2,
+              3,
+              4
+            ],
+            "title": "Status",
+            "type": "integer"
+          },
+          "statusDesc": {
+            "title": "Statusdesc",
+            "type": "string"
+          },
+          "tagParseTime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tagparsetime"
+          },
+          "taskId": {
+            "title": "Taskid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "taskId",
+          "status",
+          "statusDesc",
+          "elapsedSeconds",
+          "createdAt"
+        ],
+        "title": "TaskListItem",
+        "type": "object"
+      },
+      "TaskListResponse": {
+        "description": "表示任务总览接口的成功响应。",
+        "properties": {
+          "code": {
+            "const": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/TaskListData"
+          },
+          "msg": {
+            "title": "Msg",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "msg",
+          "data"
+        ],
+        "title": "TaskListResponse",
+        "type": "object"
+      },
+      "TaskStatusData": {
+        "description": "表示轮询或同步批次中的单个任务状态。",
+        "properties": {
+          "elapsedSeconds": {
+            "title": "Elapsedseconds",
+            "type": "number"
+          },
+          "errorMsg": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Errormsg"
+          },
+          "estimatedSeconds": {
+            "title": "Estimatedseconds",
+            "type": "integer"
+          },
+          "extra": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Extra"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaggedResumeResult"
+              },
+              {
+                "$ref": "#/components/schemas/ParsedResumeResult"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          },
+          "status": {
+            "enum": [
+              0,
+              1,
+              2,
+              3,
+              4
+            ],
+            "title": "Status",
+            "type": "integer"
+          },
+          "statusDesc": {
+            "title": "Statusdesc",
+            "type": "string"
+          },
+          "taskId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Taskid"
+          }
+        },
+        "required": [
+          "taskId",
+          "status",
+          "statusDesc",
+          "elapsedSeconds",
+          "estimatedSeconds"
+        ],
+        "title": "TaskStatusData",
+        "type": "object"
+      },
+      "TaskStatusResponse": {
+        "description": "表示异步任务轮询响应，包括任务不存在场景。",
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TaskStatusData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "msg": {
+            "title": "Msg",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "msg"
+        ],
+        "title": "TaskStatusResponse",
+        "type": "object"
+      },
+      "TaskSubmissionData": {
+        "description": "表示单任务提交成功后的初始状态。",
+        "properties": {
+          "estimatedSeconds": {
+            "title": "Estimatedseconds",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              0,
+              1,
+              2,
+              3,
+              4
+            ],
+            "title": "Status",
+            "type": "integer"
+          },
+          "taskId": {
+            "title": "Taskid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "taskId",
+          "status",
+          "estimatedSeconds"
+        ],
+        "title": "TaskSubmissionData",
+        "type": "object"
+      },
+      "TaskSubmissionResponse": {
+        "description": "表示单任务提交接口的成功响应。",
+        "properties": {
+          "code": {
+            "const": 0,
+            "title": "Code",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/TaskSubmissionData"
+          },
+          "msg": {
+            "title": "Msg",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "msg",
+          "data"
+        ],
+        "title": "TaskSubmissionResponse",
+        "type": "object"
+      },
+      "TextEchoResponse": {
+        "description": "表示兼容入口收到普通文本而非文件条目时的回显响应。",
+        "properties": {
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "type": {
+            "const": "text",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "text"
+        ],
+        "title": "TextEchoResponse",
+        "type": "object"
+      },
+      "UpdateNegativeDimensionBody": {
+        "description": "限定负向维度可更新的展示名和启用状态。",
+        "properties": {
+          "displayName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "展示名称",
+            "title": "Displayname"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "是否启用",
+            "title": "Enabled"
+          }
+        },
+        "title": "UpdateNegativeDimensionBody",
+        "type": "object"
+      },
+      "UpdateNegativeRuleBody": {
+        "additionalProperties": true,
+        "description": "允许更新任意规则字段（tagName / enabled / severity / keywords 等）。\nruleKey 由 URL path 参数确定，body 中无需提供。",
+        "properties": {},
+        "title": "UpdateNegativeRuleBody",
+        "type": "object"
+      },
+      "UpdatePositiveDimensionBody": {
+        "description": "定义正向标签维度的部分更新字段。",
+        "properties": {
+          "allowedValues": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "允许值枚举",
+            "title": "Allowedvalues"
+          },
+          "displayName": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "展示名称",
+            "title": "Displayname"
+          },
+          "enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "是否启用",
+            "title": "Enabled"
+          }
+        },
+        "title": "UpdatePositiveDimensionBody",
+        "type": "object"
+      },
+      "UpdateSeverityBody": {
+        "description": "定义 low、medium 和 high 风险等级的部分扣分更新。",
+        "properties": {
+          "high": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "高风险扣分值",
+            "title": "High"
+          },
+          "low": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "低风险扣分值",
+            "title": "Low"
+          },
+          "medium": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "中风险扣分值",
+            "title": "Medium"
+          }
+        },
+        "title": "UpdateSeverityBody",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "Work": {
+        "description": "定义单条工作经历的公司、职位、职责和时间字段。",
+        "properties": {
+          "company": {
+            "default": "",
+            "title": "Company",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "endDate": {
+            "default": "",
+            "title": "Enddate",
+            "type": "string"
+          },
+          "position": {
+            "default": "",
+            "title": "Position",
+            "type": "string"
+          },
+          "startDate": {
+            "default": "",
+            "title": "Startdate",
+            "type": "string"
+          }
+        },
+        "title": "Work",
+        "type": "object"
+      },
+      "_ChatMessage": {
+        "description": "表示 OpenAI 兼容的消息角色和 content 载荷。",
+        "properties": {
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "items": {
+                  "$ref": "#/components/schemas/_ContentItem"
+                },
+                "type": "array"
+              }
+            ],
+            "description": "消息内容：文件列表（List[ContentItem]）或文本字符串。简历解析时固定传 List[ContentItem]",
+            "title": "Content"
+          },
+          "role": {
+            "default": "user",
+            "description": "消息角色，固定传 `user`",
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "title": "_ChatMessage",
+        "type": "object"
+      },
+      "_ContentItem": {
+        "description": "表示 OpenAI 消息中的文件或文本 content 条目。",
+        "properties": {
+          "file": {
+            "$ref": "#/components/schemas/_FileInfo",
+            "description": "文件信息，`type` 为 url / file / base64 时使用"
+          },
+          "text": {
+            "default": "",
+            "description": "纯文本内容，仅 `type=text` 时填写",
+            "title": "Text",
+            "type": "string"
+          },
+          "type": {
+            "description": "文件来源类型：\n- `url`：从 HTTP 链接下载文件\n- `file`：读取服务器容器内本地文件（路径须为容器内绝对路径）\n- `base64`：直接上传 Base64 编码的文件内容\n- `text`：纯文本输入（调试用）",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "_ContentItem",
+        "type": "object"
+      },
+      "_FileInfo": {
+        "description": "OpenAI content 条目中的文件名、来源和可选内容。",
+        "properties": {
+          "content": {
+            "default": "",
+            "description": "Base64 编码的文件内容，仅在 `type=base64` 时填写",
+            "title": "Content",
+            "type": "string"
+          },
+          "name": {
+            "default": "resume.pdf",
+            "description": "文件名，用于日志标识和返回结果中的 filename 字段，建议填写真实文件名",
+            "title": "Name",
+            "type": "string"
+          },
+          "path": {
+            "default": "",
+            "description": "文件地址。\n- `type=url` 时填写 HTTP/HTTPS 下载链接，服务端需能访问该地址\n- `type=file` 时填写容器内绝对路径（默认目录 `/app/uploads/`）",
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "title": "_FileInfo",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "接口定义由 FastAPI 路由和 Pydantic Schema 自动生成。Swagger UI 是当前代码版本的接口契约，静态说明仅作调用示例。",
+    "summary": "简历解析、结构化和标签打标服务",
+    "title": "AI-Resume-ParserTag",
+    "version": "3.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/algorithm/positive-tag/extract": {
+      "post": {
+        "description": "对已结构化简历执行正向 LLM 标签提取。\n\nArgs:\n    request (dict): 包含必填 `resume` 和可选 `jobInfo` 的调试请求。\n\nReturns:\n    JSONResponse: 正向标签结果；`resume` 缺失或为空时返回 HTTP 400。\n\nNote:\n    该接口跳过 PDF 解析，仅用于算法阶段调试。",
+        "operationId": "algorithm_positive_tag_algorithm_positive_tag_extract_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Request",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PositiveAlgorithmResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponse"
+                }
+              }
+            },
+            "description": "缺少简历数据"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Algorithm Positive Tag",
+        "tags": [
+          "算法调试"
+        ]
+      }
+    },
+    "/algorithm/sensitive-tag/detect": {
+      "post": {
+        "description": "对已结构化简历执行纯规则风险标签检测。\n\nArgs:\n    request (dict): 包含必填 `resume` 和可选 `jobInfo` 的调试请求。\n\nReturns:\n    JSONResponse: 风险命中分组、命中数和扣分；`resume` 缺失或\n        为空时返回 HTTP 400。\n\nNote:\n    该入口不执行 `detectionType=llm` 的负向维度。",
+        "operationId": "algorithm_sensitive_tag_algorithm_sensitive_tag_detect_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Request",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SensitiveAlgorithmResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponse"
+                }
+              }
+            },
+            "description": "缺少简历数据"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Algorithm Sensitive Tag",
+        "tags": [
+          "算法调试"
+        ]
+      }
+    },
+    "/api/resume/async/batch": {
+      "post": {
+        "description": "批量提交 URL 多格式文档的异步视觉解析和打标任务。\n\n响应体包含每份简历的 taskId（下载失败时 code≠0 且 taskId=null），\n通过 GET /api/resume/async/result?taskId=xxx 逐个轮询结果。\n\n设计约束：\n  - 仅支持 type=url，不支持 base64/file（避免大文件占用请求内存）\n  - 单次上限 20 份；超出时 Pydantic 返回 422\n  - 文件下载在提交阶段同步完成（入队前校验可达性），失败的文件不入队\n  - extra 字段透传：调用方可用投递 ID 等业务 key 与结果关联，无需自行维护映射表\n\nArgs:\n    request (AsyncBatchRequest): 1–20 个 URL 简历和可选岗位上下文。\n\nReturns:\n    JSONResponse: 按输入顺序返回每份简历的任务标识或下载错误。",
+        "operationId": "async_batch_parse_api_resume_async_batch_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AsyncBatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/AsyncBatchSubmissionResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BusinessErrorResponse"
+                    }
+                  ],
+                  "title": "Response Async Batch Parse Api Resume Async Batch Post"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Async Batch Parse",
+        "tags": [
+          "异步简历"
+        ]
+      }
+    },
+    "/api/resume/async/batch/multiform": {
+      "post": {
+        "description": "混合提交上传和 URL 多格式文档的异步视觉解析打标任务。\n\n请求字段：\n  files    - 直接上传的 PDF/DOCX/JPG/JPEG/PNG 文件列表（可多个）\n  resumes  - JSON 字符串，格式同 /api/resume/async/batch 的 resumes 数组（type=url）\n             两者可同时传，合并后总数不超过 20 份\n\n适用场景：调用方部分简历在本地（直传）、部分在对象存储（URL），需一次提交混合处理。\n纯 URL 场景推荐使用 /api/resume/async/batch（JSON Body 更简洁）。\n\nfiles 与 resumes 至少提供一个；合并后超过 20 份返回 code=1003。\n结果查询同 /api/resume/async/result，taskId 逐个轮询。\n\nArgs:\n    files (list[UploadFile] | None): 直接上传的多格式简历文件列表。\n    resumes (str | None): `type=url` 条目数组的 JSON 字符串。\n    jobTitle (str | None): 目标岗位名称。\n    requiredSkills (str | None): 岗位必要技能。\n    jobDescription (str | None): 岗位描述。\n    jobSensitiveWords (str | None): 风险检测敏感词。\n\nReturns:\n    JSONResponse: 合并批次的提交统计和每项任务/错误信息。",
+        "operationId": "async_batch_parse_multiform_api_resume_async_batch_multiform_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_async_batch_parse_multiform_api_resume_async_batch_multiform_post"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/AsyncBatchSubmissionResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BusinessErrorResponse"
+                    }
+                  ],
+                  "title": "Response Async Batch Parse Multiform Api Resume Async Batch Multiform Post"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Async Batch Parse Multiform",
+        "tags": [
+          "异步简历"
+        ]
+      }
+    },
+    "/api/resume/async/batch/parse": {
+      "post": {
+        "description": "批量提交仅解析 URL 多格式文档的异步视觉任务。\n\n请求体格式与 /api/resume/async/batch 完全一致（resumes 数组，每项 type=url）。\n结果通过 GET /api/resume/async/result 轮询；status=3 时 result 包含：\n  filename / extra / resumeParseFinishTime / resume（解析后的结构化简历 JSON）。\nresult 可直接作为 /api/resume/async/batch/tag 的 resumes 数组元素输入。\n\nArgs:\n    request (AsyncBatchRequest): 1–20 个 URL 简历；岗位上下文不参与仅解析。\n\nReturns:\n    JSONResponse: 按输入顺序返回仅解析任务标识或下载错误。",
+        "operationId": "async_batch_parse_only_api_resume_async_batch_parse_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AsyncBatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/AsyncBatchSubmissionResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BusinessErrorResponse"
+                    }
+                  ],
+                  "title": "Response Async Batch Parse Only Api Resume Async Batch Parse Post"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Async Batch Parse Only",
+        "tags": [
+          "异步简历"
+        ]
+      }
+    },
+    "/api/resume/async/batch/tag": {
+      "post": {
+        "description": "批量提交已解析简历的异步仅打标任务。\n\nresumes 数组的每项结构与 /api/resume/async/batch/parse 结果（status=3 时的 result 字段）一致，\n可直接将解析结果透传为打标输入。\n结果通过 GET /api/resume/async/result 轮询；打标完成后 result 格式与 /api/resume/async/batch 完全一致。\n单次上限 20 份。\n\nArgs:\n    request (AsyncTagBatchRequest): 1–20 个已解析简历和可选岗位上下文。\n\nReturns:\n    JSONResponse: 为每个输入分配的打标任务标识和初始状态。",
+        "operationId": "async_batch_tag_only_api_resume_async_batch_tag_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AsyncTagBatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/AsyncBatchSubmissionResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BusinessErrorResponse"
+                    }
+                  ],
+                  "title": "Response Async Batch Tag Only Api Resume Async Batch Tag Post"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Async Batch Tag Only",
+        "tags": [
+          "异步简历"
+        ]
+      }
+    },
+    "/api/resume/async/parse": {
+      "post": {
+        "description": "提交单个多格式文档的异步视觉解析和打标任务。\n\nrequestId 幂等保护：同一 requestId 重复提交时直接返回已有任务状态，不重复处理。\n任务提交后立即返回 taskId，通过 GET /api/resume/async/result 轮询结果。\n\nArgs:\n    file (UploadFile): 上传的 PDF、DOCX、JPG、JPEG 或 PNG 文件。\n    requestId (str | None): 调用方幂等标识；重复值复用内存任务。\n    jobTitle (str | None): 目标岗位名称。\n    requiredSkills (str | None): 逗号分隔的岗位必要技能。\n    jobDescription (str | None): 岗位描述。\n    jobSensitiveWords (str | None): 风险检测使用的敏感词。\n\nReturns:\n    JSONResponse: 任务标识和初始状态，或文档格式/大小错误。",
+        "operationId": "async_parse_resume_api_resume_async_parse_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_async_parse_resume_api_resume_async_parse_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TaskSubmissionResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BusinessErrorResponse"
+                    }
+                  ],
+                  "title": "Response Async Parse Resume Api Resume Async Parse Post"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Async Parse Resume",
+        "tags": [
+          "异步简历"
+        ]
+      }
+    },
+    "/api/resume/async/result": {
+      "get": {
+        "description": "轮询单个内存异步任务的状态和结果。\n\nstatus 含义：0=待处理 1=简历解析中 2=标签打标中 3=任务完成 4=任务失败\nstatus=3 时响应体包含 result 字段（完整简历+打标 JSON）。\nstatus=4 时包含 errorMsg 字段。\ntaskId 不存在或 TTL 到期后返回 code=2001。TTL 默认 120 分钟，可通过\n``TASK_TTL_MINUTES`` 调整，并从任务创建时间开始计算。\n建议轮询间隔：3~5s，estimatedSeconds 字段提供参考等待时长。\n\nArgs:\n    taskId (str): 提交接口返回的任务 UUID。\n\nReturns:\n    JSONResponse: 当前状态和耗时；终态时包含 `result` 或 `errorMsg`。",
+        "operationId": "get_async_result_api_resume_async_result_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "taskId",
+            "required": true,
+            "schema": {
+              "title": "Taskid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Async Result",
+        "tags": [
+          "异步简历"
+        ]
+      }
+    },
+    "/api/resume/sync/batch": {
+      "post": {
+        "description": "同步批量执行 PDF 解析和打标并返回按项结果。\n\n每条 result 格式与 GET /api/resume/async/result (status=3) 的 data 字段完全一致。\n单次上限 50 份；max_concurrency 控制并发上限（1~30，默认同 MAX_WORKERS）。\n支持与 /api/resume/async/batch 相同的请求体字段（jobTitle / requiredSkills / jobDescription / jobSensitiveWords）。\n\nArgs:\n    request (SyncBatchRequest): 1–50 份简历、并发上限和岗位上下文。\n\nReturns:\n    JSONResponse: 批次统计以及每项成功结果或错误。",
+        "operationId": "sync_parse_and_tag_resumes_api_resume_sync_batch_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncBatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncBatchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sync Parse And Tag Resumes",
+        "tags": [
+          "同步与兼容接口"
+        ]
+      }
+    },
+    "/api/resume/sync/parse": {
+      "post": {
+        "description": "同步批量解析 PDF/DOCX/JPEG/PNG，不执行标签阶段。\n\nresults[].data.resume 为解析后的原始简历 JSON，可直接作为 /api/resume/sync/tag 的输入。\n单次上限 50 份；max_concurrency 控制并发上限（1~30，默认同 MAX_WORKERS）。\n请求体字段与 /api/resume/sync/batch 完全一致（resumes 数组，每项含 type / file / text）。\n\nArgs:\n    request (SyncBatchRequest): 1–50 份简历和本次请求的并发上限。\n\nReturns:\n    JSONResponse: 批次统计和每项已归一的 `resume`，或获取/解析错误。",
+        "operationId": "sync_parse_resumes_api_resume_sync_parse_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncBatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncParseBatchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sync Parse Resumes",
+        "tags": [
+          "同步与兼容接口"
+        ]
+      }
+    },
+    "/api/resume/sync/tag": {
+      "post": {
+        "description": "同步批量打标已解析简历，不重复处理 PDF。\n\n输入中 resumes 数组的每项结构与 /api/resume/sync/parse 响应的 results[].data 字段完全一致：\n  filename / extra / resumeParseFinishTime / resume（必填，解析后的简历 JSON）。\n输出格式与 /api/resume/sync/batch 完全一致，results[].data.result 包含解析+打标完整 JSON。\n单次上限 50 份；max_concurrency 控制并发上限（1~30，默认同 MAX_WORKERS）。\n支持 jobTitle / requiredSkills / jobDescription / jobSensitiveWords 岗位信息字段。\n\nArgs:\n    request (SyncTagRequest): 1–50 份已解析简历、并发上限和岗位上下文。\n\nReturns:\n    JSONResponse: 批次统计和每项完整打标结果或错误。",
+        "operationId": "sync_tag_resumes_api_resume_sync_tag_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SyncTagRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SyncBatchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Sync Tag Resumes",
+        "tags": [
+          "同步与兼容接口"
+        ]
+      }
+    },
+    "/api/tags/config": {
+      "get": {
+        "description": "返回当前生效的标签维度、规则和扣分配置。\n\nReturns:\n    JSONResponse: 完整运行时配置或代码默认配置。",
+        "operationId": "get_tags_config_api_tags_config_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagConfigResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Tags Config",
+        "tags": [
+          "标签配置"
+        ]
+      }
+    },
+    "/api/tags/config/negative": {
+      "post": {
+        "description": "新增规则型或 LLM 型负向标签维度。\n\nArgs:\n    body (AddNegativeDimensionBody): 维度元数据、检测类型和初始规则。\n\nReturns:\n    JSONResponse: 更新后配置，或维度已存在的业务错误。",
+        "operationId": "add_negative_dimension_api_tags_config_negative_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddNegativeDimensionBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessErrorResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessErrorResponse"
+                }
+              }
+            },
+            "description": "标签配置内容无效"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpDetailErrorResponse"
+                }
+              }
+            },
+            "description": "管理员 Token 无效"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessErrorResponse"
+                }
+              }
+            },
+            "description": "标签结构已锁定"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Negative Dimension",
+        "tags": [
+          "标签配置"
+        ]
+      }
+    },
+    "/api/tags/config/negative/{dimension}": {
+      "delete": {
+        "description": "从运行时配置删除指定负向标签维度。\n\nArgs:\n    dimension (str): 待删除的负向维度标识。\n\nReturns:\n    JSONResponse: 删除后配置，或维度不存在的业务错误。",
+        "operationId": "delete_negative_dimension_api_tags_config_negative__dimension__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dimension",
+            "required": true,
+            "schema": {
+              "title": "Dimension",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessErrorResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessErrorResponse"
+                }
+              }
+            },
+            "description": "标签配置内容无效"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpDetailErrorResponse"
+                }
+              }
+            },
+            "description": "管理员 Token 无效"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessErrorResponse"
+                }
+              }
+            },
+            "description": "标签结构已锁定"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Negative Dimension",
+        "tags": [
+          "标签配置"
+        ]
+      },
+      "put": {
+        "description": "更新负向维度的展示名或启用状态。\n\nArgs:\n    dimension (str): 稳定负向维度标识。\n    body (UpdateNegativeDimensionBody): 需要更新的可选字段。\n\nReturns:\n    JSONResponse: 更新后配置，或维度不存在的业务错误。",
+        "operationId": "update_negative_dimension_api_tags_config_negative__dimension__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dimension",
+            "required": true,
+            "schema": {
+              "title": "Dimension",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateNegativeDimensionBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TagConfigResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BusinessErrorResponse"
+                    }
+                  ],
+                  "title": "Response Update Negative Dimension Api Tags Config Negative  Dimension  Put"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessErrorResponse"
+                }
+              }
+            },
+            "description": "标签配置内容无效"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpDetailErrorResponse"
+                }
+              }
+            },
+            "description": "管理员 Token 无效"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessErrorResponse"
+                }
+              }
+            },
+            "description": "标签结构已锁定"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Negative Dimension",
+        "tags": [
+          "标签配置"
+        ]
+      }
+    },
+    "/api/tags/config/negative/{dimension}/rules": {
+      "post": {
+        "description": "在指定负向维度下新增唯一规则。\n\nArgs:\n    dimension (str): 目标负向维度标识。\n    body (AddNegativeRuleBody): 规则标识、标签名、等级和透传参数。\n\nReturns:\n    JSONResponse: 更新后配置，或维度/规则冲突的业务错误。",
+        "operationId": "add_negative_rule_api_tags_config_negative__dimension__rules_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dimension",
+            "required": true,
+            "schema": {
+              "title": "Dimension",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddNegativeRuleBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessErrorResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessErrorResponse"
+                }
+              }
+            },
+            "description": "标签配置内容无效"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpDetailErrorResponse"
+                }
+              }
+            },
+            "description": "管理员 Token 无效"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessErrorResponse"
+                }
+              }
+            },
+            "description": "标签结构已锁定"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Negative Rule",
+        "tags": [
+          "标签配置"
+        ]
+      }
+    },
+    "/api/tags/config/negative/{dimension}/rules/{rule_key}": {
+      "delete": {
+        "description": "删除指定负向维度下的单条规则。\n\nArgs:\n    dimension (str): 目标负向维度标识。\n    rule_key (str): 待删除的规则标识。\n\nReturns:\n    JSONResponse: 删除后配置，或维度/规则不存在的业务错误。",
+        "operationId": "delete_negative_rule_api_tags_config_negative__dimension__rules__rule_key__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dimension",
+            "required": true,
+            "schema": {
+              "title": "Dimension",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "rule_key",
+            "required": true,
+            "schema": {
+              "title": "Rule Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessErrorResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessErrorResponse"
+                }
+              }
+            },
+            "description": "标签配置内容无效"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpDetailErrorResponse"
+                }
+              }
+            },
+            "description": "管理员 Token 无效"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessErrorResponse"
+                }
+              }
+            },
+            "description": "标签结构已锁定"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Negative Rule",
+        "tags": [
+          "标签配置"
+        ]
+      },
+      "put": {
+        "description": "合并更新指定负向规则的任意允许字段。\n\nArgs:\n    dimension (str): 目标负向维度标识。\n    rule_key (str): 目标规则标识。\n    body (UpdateNegativeRuleBody): 要合并进现有规则的字段。\n\nReturns:\n    JSONResponse: 更新后配置，或维度/规则不存在的业务错误。",
+        "operationId": "update_negative_rule_api_tags_config_negative__dimension__rules__rule_key__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dimension",
+            "required": true,
+            "schema": {
+              "title": "Dimension",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "rule_key",
+            "required": true,
+            "schema": {
+              "title": "Rule Key",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateNegativeRuleBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TagConfigResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BusinessErrorResponse"
+                    }
+                  ],
+                  "title": "Response Update Negative Rule Api Tags Config Negative  Dimension  Rules  Rule Key  Put"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessErrorResponse"
+                }
+              }
+            },
+            "description": "标签配置内容无效"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpDetailErrorResponse"
+                }
+              }
+            },
+            "description": "管理员 Token 无效"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessErrorResponse"
+                }
+              }
+            },
+            "description": "标签结构已锁定"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Negative Rule",
+        "tags": [
+          "标签配置"
+        ]
+      }
+    },
+    "/api/tags/config/positive": {
+      "post": {
+        "description": "新增全局唯一的正向标签维度。\n\nArgs:\n    body (AddPositiveDimensionBody): 维度标识、展示名、启用状态和候选值。\n\nReturns:\n    JSONResponse: 更新后配置，或维度已存在的业务错误。",
+        "operationId": "add_positive_dimension_api_tags_config_positive_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddPositiveDimensionBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessErrorResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessErrorResponse"
+                }
+              }
+            },
+            "description": "标签配置内容无效"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpDetailErrorResponse"
+                }
+              }
+            },
+            "description": "管理员 Token 无效"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessErrorResponse"
+                }
+              }
+            },
+            "description": "标签结构已锁定"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Add Positive Dimension",
+        "tags": [
+          "标签配置"
+        ]
+      }
+    },
+    "/api/tags/config/positive/{dimension}": {
+      "delete": {
+        "description": "从运行时配置删除指定正向标签维度。\n\nArgs:\n    dimension (str): 待删除的维度标识。\n\nReturns:\n    JSONResponse: 删除后配置，或维度不存在的业务错误。",
+        "operationId": "delete_positive_dimension_api_tags_config_positive__dimension__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dimension",
+            "required": true,
+            "schema": {
+              "title": "Dimension",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessErrorResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessErrorResponse"
+                }
+              }
+            },
+            "description": "标签配置内容无效"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpDetailErrorResponse"
+                }
+              }
+            },
+            "description": "管理员 Token 无效"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessErrorResponse"
+                }
+              }
+            },
+            "description": "标签结构已锁定"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Positive Dimension",
+        "tags": [
+          "标签配置"
+        ]
+      },
+      "put": {
+        "description": "部分更新指定正向标签维度。\n\nArgs:\n    dimension (str): 稳定维度标识。\n    body (UpdatePositiveDimensionBody): 需要更新的可选字段。\n\nReturns:\n    JSONResponse: 更新后配置，或维度不存在的业务错误。",
+        "operationId": "update_positive_dimension_api_tags_config_positive__dimension__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dimension",
+            "required": true,
+            "schema": {
+              "title": "Dimension",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdatePositiveDimensionBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TagConfigResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BusinessErrorResponse"
+                    }
+                  ],
+                  "title": "Response Update Positive Dimension Api Tags Config Positive  Dimension  Put"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessErrorResponse"
+                }
+              }
+            },
+            "description": "标签配置内容无效"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpDetailErrorResponse"
+                }
+              }
+            },
+            "description": "管理员 Token 无效"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessErrorResponse"
+                }
+              }
+            },
+            "description": "标签结构已锁定"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Positive Dimension",
+        "tags": [
+          "标签配置"
+        ]
+      }
+    },
+    "/api/tags/config/reset": {
+      "post": {
+        "description": "删除运行时覆盖并恢复代码中的默认标签配置。\n\nReturns:\n    JSONResponse: 重置后的默认配置。\n\nNote:\n    该操作会删除 `RUNTIME_CFG_FILE`，且不保留文件级历史版本。",
+        "operationId": "reset_tags_config_api_tags_config_reset_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagConfigResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessErrorResponse"
+                }
+              }
+            },
+            "description": "标签配置内容无效"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpDetailErrorResponse"
+                }
+              }
+            },
+            "description": "管理员 Token 无效"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessErrorResponse"
+                }
+              }
+            },
+            "description": "标签结构已锁定"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Reset Tags Config",
+        "tags": [
+          "标签配置"
+        ]
+      }
+    },
+    "/api/tags/config/severity": {
+      "put": {
+        "description": "部分更新风险等级的扣分值。\n\nArgs:\n    body (UpdateSeverityBody): low、medium 或 high 的可选更新值。\n\nReturns:\n    JSONResponse: 更新后配置，或请求未提供任何值的业务错误。",
+        "operationId": "update_severity_api_tags_config_severity_put",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Authorization",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSeverityBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/TagConfigResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BusinessErrorResponse"
+                    }
+                  ],
+                  "title": "Response Update Severity Api Tags Config Severity Put"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessErrorResponse"
+                }
+              }
+            },
+            "description": "标签配置内容无效"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpDetailErrorResponse"
+                }
+              }
+            },
+            "description": "管理员 Token 无效"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BusinessErrorResponse"
+                }
+              }
+            },
+            "description": "标签结构已锁定"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Severity",
+        "tags": [
+          "标签配置"
+        ]
+      }
+    },
+    "/api/tags/mapping": {
+      "get": {
+        "description": "返回当前标签维度和值的完整、带版本 ID 映射快照。\n\nReturns:\n    dict: 当前映射版本、全部维度记录和全部标签值记录。",
+        "operationId": "get_tags_mapping_api_tags_mapping_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagMappingResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Tags Mapping",
+        "tags": [
+          "标签配置"
+        ]
+      }
+    },
+    "/api/tasks": {
+      "get": {
+        "description": "列出当前进程内存中的异步任务。\n\nArgs:\n    status (int | None): 可选任务状态过滤值，范围由 `_STATUS_DESC` 定义。\n    include_result (bool): 是否在已完成任务中附带完整简历结果。\n\nReturns:\n    JSONResponse: 按创建时间倒序排列的任务摘要列表。\n\nNote:\n    该接口仅用于运维和调试；`include_result=true` 会返回完整简历。",
+        "operationId": "list_tasks_api_tasks_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_result",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Include Result",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TaskListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Tasks",
+        "tags": [
+          "异步简历"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "description": "返回不访问外部依赖的进程存活状态。\n\nReturns:\n    dict: 包含固定 `healthy` 状态和当前本地时间的探针响应。",
+        "operationId": "health_check_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health Check",
+        "tags": [
+          "服务状态"
+        ]
+      }
+    },
+    "/v1/chat/completions": {
+      "post": {
+        "description": "处理 OpenAI Chat Completions 兼容的简历解析请求。\n\nArgs:\n    request (ChatCompletionRequest): 模型别名、消息、流式/异步选项和\n        可选岗位上下文。\n\nReturns:\n    JSONResponse | StreamingResponse: OpenAI 兼容 completion，或在异步\n        单文件模式下包含任务标识的 completion。",
+        "operationId": "create_chat_completion_v1_chat_completions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatCompletionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ChatCompletionResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/TextEchoResponse"
+                    }
+                  ],
+                  "title": "Response Create Chat Completion V1 Chat Completions Post"
+                }
+              },
+              "text/event-stream": {
+                "example": "data: {\"object\":\"chat.completion\"}\n\n",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "JSON completion；stream=true 时为 SSE 数据流"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpErrorResponse"
+                }
+              }
+            },
+            "description": "文档来源或解析请求无效"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Chat Completion",
+        "tags": [
+          "同步与兼容接口"
+        ]
+      }
+    },
+    "/v1/models": {
+      "get": {
+        "description": "返回 OpenAI SDK 兼容的逻辑模型列表。\n\nReturns:\n    dict: 包含解析、解析加打标和兼容别名的 OpenAI `list`\n        响应。\n\nNote:\n    该接口用于客户端能力探测，不代表后端模型服务已就绪。",
+        "operationId": "list_models_v1_models_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelListResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Models",
+        "tags": [
+          "服务状态"
+        ]
+      }
+    }
+  },
+  "tags": [
+    {
+      "description": "服务健康检查和 OpenAI 兼容模型能力探测。",
+      "name": "服务状态"
+    },
+    {
+      "description": "异步提交、批量处理、结果轮询和任务状态查询。",
+      "name": "异步简历"
+    },
+    {
+      "description": "同步 PDF/DOCX 解析、打标及 OpenAI Chat Completions 兼容入口。",
+      "name": "同步与兼容接口"
+    },
+    {
+      "description": "正向维度、负向规则和风险扣分配置管理。",
+      "name": "标签配置"
+    },
+    {
+      "description": "跳过文档解析，独立验证正向标签和风险检测算法。",
+      "name": "算法调试"
+    }
+  ]
+}

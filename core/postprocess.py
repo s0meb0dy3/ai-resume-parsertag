@@ -11,28 +11,71 @@
   分批路径：_merge_results → _post_process → _validate_schema
   单批路径：_post_process → _validate_schema
 """
-from core.prompts import SCHEMA_KEYS, CANDIDATE_KEYS, EDU_KEYS, WORK_KEYS, PROJ_KEYS
+from core.prompting.resume_parsing import (
+    CANDIDATE_KEYS,
+    EDU_KEYS,
+    PROJ_KEYS,
+    SCHEMA_KEYS,
+    WORK_KEYS,
+)
+from core.resume_contract import normalize_resume_payload
 from tag.tag_data import classify_education
 from tag import load_tag_cfg
+from tag.tag_config import MAX_SKILL_TAGS, sort_positive_tag_entries
+from tag.tag_value_id_mapper import get_tag_value_id_mapper
 
 # education / workYears 由规则层确定性计算，输出置信度会误导调用方（规则结果无概率含义）
 _NO_CONF_DIM = {"education", "workYears"}
+_VALID_TAG_SOURCES = {"rule", "llm", "hybrid"}
+
+
+def _normalize_tag_source(value: object, default: str = "rule") -> str:
+    """把历史来源值收敛到公开接口允许的三个来源枚举。"""
+    source = str(value or "").strip().lower()
+    if source == "ai":
+        return "llm"
+    return source if source in _VALID_TAG_SOURCES else default
 
 
 def _build_display_maps(cfg: dict) -> tuple[dict, dict]:
-    """从运行时配置构建 displayName 查找表，只包含 enabled=True 的维度。
-    pos 同时作为"允许输出"的白名单：不在其中的维度在 _conform_to_template 中被过滤掉。
+    """从运行时配置构建已启用维度的展示名查找表。
+
+    Args:
+        cfg (dict): 包含 `positiveDimensions` 和 `negativeDimensions` 的标签配置。
+
+    Returns:
+        tuple[dict, dict]: 正向 `dimension -> displayName` 映射，以及负向
+            `dimension/displayName -> (dimension, displayName)` 兼容映射。
+
+    Note:
+        正向映射同时是最终输出白名单，未启用或未配置维度会被过滤。
     """
     pos = {d["dimension"]: d["displayName"]
            for d in cfg.get("positiveDimensions", []) if d.get("enabled", True)}
-    neg = {d["displayName"]: (d["dimension"], d["displayName"])
-           for d in cfg.get("negativeDimensions", []) if d.get("enabled", True)}
+    neg = {}
+    for dimension in cfg.get("negativeDimensions", []):
+        if not dimension.get("enabled", True):
+            continue
+        value = (dimension["dimension"], dimension["displayName"])
+        neg[dimension["dimension"]] = value
+        neg[dimension["displayName"]] = value
     return pos, neg
 
 
-# ── 字段类型规范化 ────────────────────────────────────────────────
+# 字段类型规范化
 
 def _post_process(data: dict) -> dict:
+    """将候选人性别和年龄归一为最终 Schema 使用的数值。
+
+    Args:
+        data (dict): LLM 返回的简历对象。
+
+    Returns:
+        dict: 原地更新后的简历对象；顶层非字典时返回空字典。
+
+    Note:
+        该函数会修改传入字典，并移除 `candidate.other`。
+    """
     if not isinstance(data, dict):
         return {}
     c = data.get("candidate", {})
@@ -47,9 +90,21 @@ def _post_process(data: dict) -> dict:
     return data
 
 
-# ── Schema 校验 ───────────────────────────────────────────────────
+# Schema 校验
 
 def _validate_schema(data: dict) -> tuple:
+    """补齐简历顶层和子项字段，并记录自动修复摘要。
+
+    Args:
+        data (dict): 待校验和归一的简历对象。
+
+    Returns:
+        tuple[dict, dict]: 归一后简历以及包含 `valid` 和 `fixes` 的报告。
+            顶层非字典时简历结果为空字典。
+
+    Note:
+        该函数会原地修改传入字典；自动修复过的结果会标记为非完全有效。
+    """
     report = {"valid": True, "fixes": []}
 
     if not isinstance(data, dict):
@@ -114,9 +169,18 @@ def _validate_schema(data: dict) -> tuple:
     return data, report
 
 
-# ── 多批次合并 ────────────────────────────────────────────────────
+# 多批次合并
 
 def _merge_str(a: str, b: str) -> str:
+    """合并两个分批字段，空值优先让位且冲突时保留较长值。
+
+    Args:
+        a (str): 已合并批次的字段值。
+        b (str): 新批次的字段值。
+
+    Returns:
+        str: 去除首尾空白后选定的字段值。
+    """
     a, b = (a or "").strip(), (b or "").strip()
     if not a: return b
     if not b: return a
@@ -129,6 +193,15 @@ _FIRST_WINS = {"name", "phone", "email"}
 
 
 def _merge_candidate(a: dict, b: dict) -> dict:
+    """按身份字段优先级合并两个候选人对象。
+
+    Args:
+        a (dict): 已合并的候选人字段。
+        b (dict): 新批次提取的候选人字段。
+
+    Returns:
+        dict: 姓名、电话和邮箱优先首次非空值，其他文本按长度合并的结果。
+    """
     result = {}
     for k in set(list(a.keys()) + list(b.keys())):
         va, vb = a.get(k, ""), b.get(k, "")
@@ -142,6 +215,15 @@ def _merge_candidate(a: dict, b: dict) -> dict:
 
 
 def _dedup(items: list, keys: list) -> list:
+    """按组合业务键对经历列表去重并过滤全空项。
+
+    Args:
+        items (list): 待去重的教育、工作或项目对象列表。
+        keys (list): 构成去重键的字段名列表。
+
+    Returns:
+        list: 保持首次出现顺序的唯一非空对象列表。
+    """
     seen, out = set(), []
     for item in items:
         if not isinstance(item, dict):
@@ -155,6 +237,14 @@ def _dedup(items: list, keys: list) -> list:
 
 
 def _merge_results(batch_results: list) -> dict:
+    """合并长 PDF 各页面批次的局部简历结果。
+
+    Args:
+        batch_results (list): 按页面顺序排列的局部简历对象。
+
+    Returns:
+        dict: 已合并候选人字段并对三类经历去重的简历对象。
+    """
     merged = {"candidate": {}, "educations": [], "works": [], "projects": []}
     for r in batch_results:
         if not isinstance(r, dict):
@@ -171,11 +261,34 @@ def _merge_results(batch_results: list) -> dict:
     return merged
 
 
-# ── 最终输出序列化 ────────────────────────────────────────────────
+# 最终输出序列化
 
 def _conform_to_template(task_id: str, resume: dict, tag_info: dict, resume_parse_time: str) -> dict:
+    """将解析简历和打标中间结果转为最终 API 模板。
+
+    Args:
+        task_id (str): 当前任务 UUID。
+        resume (dict): 已归一的结构化简历。
+        tag_info (dict): 打标器返回的正向标签、风险命中和扣分。
+        resume_parse_time (str): 简历解析完成时间字符串。
+
+    Returns:
+        dict: 包含任务时间、简历主体、正向标签和负向标签的 API 结果。
+
+    Note:
+        输出维度使用当前运行时配置白名单，未启用维度不会进入结果。
+    """
+    # 最终边界再次归一，保证外部直接调用和解析主链使用同一 Resume 契约。
+    resume = normalize_resume_payload(resume)
     # 每次调用时读取最新配置（mtime 缓存，文件未变则无额外 IO）
-    _positive_display, _negative_dim = _build_display_maps(load_tag_cfg())
+    runtime_cfg = load_tag_cfg()
+    mapper = get_tag_value_id_mapper()
+    _positive_display, _negative_dim = _build_display_maps(runtime_cfg)
+    allowed_by_dimension = {
+        dimension["dimension"]: set(dimension.get("allowedValues", []))
+        for dimension in runtime_cfg.get("positiveDimensions", [])
+        if dimension.get("enabled", True)
+    }
     c = resume.get("candidate") or {}
     candidate = {
         "name":             c.get("name", ""),
@@ -191,12 +304,39 @@ def _conform_to_template(task_id: str, resume: dict, tag_info: dict, resume_pars
     }
 
     def _edu(e):
+        """裁剪单条教育经历为输出模板允许的字段。
+
+        Args:
+            e: 已归一化的教育经历字典。
+
+        Returns:
+            仅保留模板字段的教育经历字典。
+        """
         return {k: e.get(k, "") for k in ("school", "major", "degree", "education", "startDate", "endDate")}
 
     def _work(w):
-        return {k: w.get(k, "") for k in ("company", "position", "description", "startDate", "endDate")}
+        """裁剪单条工作经历为输出模板允许的字段。
+
+        Args:
+            w: 已归一化的工作经历字典。
+
+        Returns:
+            仅保留模板字段的工作经历字典。
+        """
+        return {
+            k: w.get(k, "")
+            for k in ("company", "position", "description", "startDate", "endDate")
+        }
 
     def _proj(p):
+        """裁剪单条项目经历为输出模板允许的字段。
+
+        Args:
+            p: 已归一化的项目经历字典。
+
+        Returns:
+            仅保留模板字段的项目经历字典。
+        """
         return {k: p.get(k, "") for k in ("company", "projectName", "role", "description", "startDate", "endDate")}
 
     overall_conf = round(tag_info.get("confidence", 0), 2)
@@ -209,15 +349,28 @@ def _conform_to_template(task_id: str, resume: dict, tag_info: dict, resume_pars
         if dim not in _positive_display:
             continue
         arr_key = f"{dim}ValueArray"
-        values  = tag.get(arr_key, [])
-        src     = tag.get("source", "ai")
+        values = [
+            value for value in tag.get(arr_key, [])
+            if value in allowed_by_dimension.get(dim, set())
+        ]
+        if dim == "skills":
+            values = values[:MAX_SKILL_TAGS]
+        src     = _normalize_tag_source(tag.get("source"), default="rule")
         entry: dict = {
+            "dimensionId": mapper.resolve_dimension(dim)["id"],
             "dimension":   dim,
             "displayName": _positive_display[dim],
         }
         if dim not in _NO_CONF_DIM:
             entry["confidence"] = tag["confidence"] if tag.get("confidence") is not None else overall_conf
-        entry["value"] = [{"tag": v, "source": src} for v in values]
+        entry["value"] = [
+            {
+                "tagId": mapper.resolve(dim, value)["id"],
+                "tag": value,
+                "source": src,
+            }
+            for value in values
+        ]
         # 跳过 value 为空的非固定维度（LLM 输出空数组表示无匹配，无需透出）
         if not entry["value"] and dim not in ("education", "workYears"):
             continue
@@ -225,35 +378,79 @@ def _conform_to_template(task_id: str, resume: dict, tag_info: dict, resume_pars
         if dim == "education":
             edu_entry = entry
 
-    if edu_entry is not None:
-        schools  = [e.get("school", "") for e in resume.get("educations", [])]
-        degrees  = [e.get("education", "") for e in resume.get("educations", [])]
-        rule_edu = classify_education(schools, degrees)
-        existing = {v["tag"] for v in edu_entry["value"]}
-        for v in rule_edu:
-            if v not in existing:
-                edu_entry["value"].append({"tag": v, "source": "rule"})
+    # 最终边界再次用确定性规则覆盖教育背景，防止外部中间结果绕过归一层。
+    schools = [e.get("school", "") for e in resume.get("educations", [])]
+    degrees = [e.get("education", "") for e in resume.get("educations", [])]
+    rule_edu = [
+        value for value in classify_education(schools, degrees)
+        if value in allowed_by_dimension.get("education", set())
+    ]
+    if "education" in _positive_display and rule_edu:
+        if edu_entry is None:
+            edu_entry = {
+                "dimensionId": mapper.resolve_dimension("education")["id"],
+                "dimension": "education",
+                "displayName": _positive_display["education"],
+                "value": [],
+            }
+            tags_array.append(edu_entry)
+        edu_entry["value"] = [
+            {
+                "tagId": mapper.resolve("education", value)["id"],
+                "tag": value,
+                "source": "rule",
+            }
+            for value in rule_edu
+        ]
+    elif edu_entry is not None:
+        edu_entry["value"] = []
+
+    # 最终响应再次排序，兼容外部直接传入未归一 `tag_info` 的调用路径。
+    tags_array = sort_positive_tag_entries(tags_array)
 
     neg_array = []
     for group in tag_info.get("hitTags", []):
         category = group.get("category", "")
-        dim_code, display = _negative_dim.get(category, (category, category))
+        lookup_key = group.get("dimension") or category
+        dim_code, display = _negative_dim.get(lookup_key, (category, category))
+        dimension_mapping = mapper.resolve_dimension(dim_code)
+        if dimension_mapping is None:
+            continue
+        mapped_hits = []
+        for hit in group.get("hits", []):
+            value_mapping = (
+                mapper.resolve_rule(dim_code, hit.get("ruleKey", ""))
+                or mapper.resolve(dim_code, hit.get("tag", ""))
+            )
+            if value_mapping is None:
+                continue
+            mapped_hits.append({
+                "tagId": value_mapping["id"],
+                "tag": hit.get("tag", ""),
+                "severity": hit.get("severity", ""),
+                "matchedContent": hit.get("matchedContent", ""),
+                "source": _normalize_tag_source(
+                    hit.get("source"), default="rule"
+                ),
+            })
+        if not mapped_hits:
+            continue
         neg_array.append({
+            "dimensionId": dimension_mapping["id"],
             "dimension":   dim_code,
             "displayName": display,
-            "value": [
-                {
-                    "tag":            h.get("tag", ""),
-                    "severity":       h.get("severity", ""),
-                    "matchedContent": h.get("matchedContent", ""),
-                    "source":         "ai",
-                }
-                for h in group.get("hits", [])
-            ],
+            "value": mapped_hits,
         })
+
+    visible_negative_hits = sum(len(group["value"]) for group in neg_array)
+    visible_deduction = sum(
+        runtime_cfg.get("severityDeduction", {}).get(hit["severity"], -5)
+        for group in neg_array for hit in group["value"]
+    )
 
     return {
         "taskId":                task_id,
+        "mappingVersion":        mapper.version,
         "resumeParseFinishTime": resume_parse_time,
         "tagParseFinishTime":    tag_info.get("tagParseTime", ""),
         "candidate":   candidate,
@@ -264,8 +461,8 @@ def _conform_to_template(task_id: str, resume: dict, tag_info: dict, resume_pars
             "tagsArray": tags_array,
         },
         "negativeTags": {
-            "hitCount":       tag_info.get("hitCount", 0),
-            "deductionScore": tag_info.get("deductionScore", 0),
+            "hitCount":       visible_negative_hits,
+            "deductionScore": visible_deduction,
             "tagsArray":      neg_array,
         },
     }

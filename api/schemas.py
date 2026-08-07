@@ -10,60 +10,78 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from core.resume_contract import ResumeData
 
-# ── 共享基础 ─────────────────────────────────────────────────────
+
+# 共享基础模型
 
 
 class _JobContext(BaseModel):
-    """岗位上下文，可选，影响打标结果。"""
+    """承载会影响打标和岗位匹配的可选岗位上下文。"""
     jobTitle:          str = Field("", description="岗位名称")
     requiredSkills:    str = Field("", description="技能要求，逗号分隔")
     jobDescription:    str = Field("", description="岗位 JD")
     jobSensitiveWords: str = Field("", description="风险关键词，逗号分隔")
 
     def to_job_info(self) -> dict:
+        """将 Pydantic 字段转为打标器使用的非空字符串字典。
+
+        Returns:
+            dict: 包含 `jobTitle`、`requiredSkills`、`jobDescription` 和
+                `jobSensitiveWords` 的岗位上下文；空值统一为空字符串。
+        """
         return {k: getattr(self, k) or ""
                 for k in ("jobTitle", "requiredSkills", "jobDescription", "jobSensitiveWords")}
 
 
 class FileMeta(BaseModel):
-    """URL 方式简历的文件元信息。"""
+    """URL 简历的文件标识、下载地址和业务透传信息。"""
     name:  str           = Field("resume.pdf", description="文件名，用于日志和结果标识")
     path:  str           = Field("",           description="可访问的 HTTP/HTTPS 下载链接")
     extra: Optional[str] = Field(None,         description="调用方业务标识，结果查询时原样返回")
 
 
 class ResumeUrlItem(BaseModel):
-    """URL 方式简历条目（type 必须为 url）。"""
+    """限定 `type=url` 的异步多格式简历条目。"""
     type:  Literal["url"]
     file:  FileMeta      = Field(default_factory=FileMeta)
     extra: Optional[str] = Field(None, description="顶层 extra，优先级低于 file.extra")
 
     @property
     def effective_extra(self) -> Optional[str]:
-        """file.extra 优先，其次顶层 extra。"""
+        """按兼容优先级返回业务透传标识。
+
+        Returns:
+            str | None: 优先返回 `file.extra`，其次返回顶层 `extra`；
+                两者均为空时返回 `None`。
+        """
         return self.file.extra or self.extra or None
 
     @property
     def filename(self) -> str:
+        """返回日志和结果关联使用的文件名。
+
+        Returns:
+            str: `file.name` 或默认文件名 `resume.pdf`。
+        """
         return self.file.name or "resume.pdf"
 
 
 class ParsedResumeItem(BaseModel):
-    """已解析简历条目，作为仅打标接口的输入。"""
+    """已解析简历及其元数据，作为仅打标接口的输入。"""
     filename:              str            = Field("resume.pdf", description="文件名")
     extra:                 Optional[str]  = Field(None, description="调用方业务标识")
     resumeParseFinishTime: str            = Field("",   description="解析完成时间")
-    resume:                Dict[str, Any] = Field(...,  description="解析后的结构化简历 JSON")
+    resume:                ResumeData     = Field(...,  description="解析后的结构化简历 JSON")
 
 
-# ── 异步接口请求模型 ─────────────────────────────────────────────
+# 异步接口请求模型
 
 
 class AsyncBatchRequest(_JobContext):
     """
     POST /api/resume/async/batch 和 /api/resume/async/batch/parse 请求体。
-    单次最多 20 份，仅支持 type=url。
+    单次最多 20 份，仅支持 type=url；文件支持 PDF、DOCX、JPG、JPEG、PNG。
     """
     resumes: List[ResumeUrlItem] = Field(..., min_length=1, max_length=20,
                                          description="简历列表，每项必须含 type=url 和 file.path")
@@ -78,16 +96,16 @@ class AsyncTagBatchRequest(_JobContext):
                                             description="已解析简历列表，每项须含 resume 字段")
 
 
-# ── 同步接口请求模型 ─────────────────────────────────────────────
+# 同步接口请求模型
 
 
 class SyncBatchRequest(_JobContext):
     """
     POST /api/resume/sync/batch 和 /api/resume/sync/parse 请求体。
-    resumes 支持 type=url/file/base64，item 结构灵活，由 get_pdf_source_from_content 解析。
+    resumes 支持 type=url/file/base64，item 结构灵活，由 get_document_source_from_content 解析。
     """
     resumes:         List[Any]     = Field(..., min_length=1, max_length=50,
-                                           description="简历列表，支持 url / file / base64 三种方式")
+                                           description="PDF/DOCX/JPEG/PNG 简历列表，支持 url / file / base64")
     max_concurrency: Optional[int] = Field(None, ge=1, le=30, description="并发上限（1~30）")
 
 
@@ -101,10 +119,11 @@ class SyncTagRequest(_JobContext):
     max_concurrency: Optional[int]          = Field(None, ge=1, le=30, description="并发上限（1~30）")
 
 
-# ── 打标配置接口请求模型 ─────────────────────────────────────────
+# 打标配置接口请求模型
 
 
 class AddPositiveDimensionBody(BaseModel):
+    """定义新增正向标签维度的名称、开关和候选值。"""
     dimension:     str       = Field(..., min_length=1, description="维度标识，全局唯一，建议英文")
     displayName:   str       = Field("",  description="展示名称，默认同 dimension")
     enabled:       bool      = Field(True, description="是否启用")
@@ -112,6 +131,7 @@ class AddPositiveDimensionBody(BaseModel):
 
 
 class UpdatePositiveDimensionBody(BaseModel):
+    """定义正向标签维度的部分更新字段。"""
     displayName:   Optional[str]       = Field(None, description="展示名称")
     enabled:       Optional[bool]      = Field(None, description="是否启用")
     allowedValues: Optional[List[str]] = Field(None, description="允许值枚举")
@@ -134,6 +154,7 @@ class AddNegativeDimensionBody(BaseModel):
 
 
 class UpdateNegativeDimensionBody(BaseModel):
+    """限定负向维度可更新的展示名和启用状态。"""
     displayName: Optional[str]  = Field(None, description="展示名称")
     enabled:     Optional[bool] = Field(None, description="是否启用")
 
@@ -160,6 +181,7 @@ class UpdateNegativeRuleBody(BaseModel):
 
 
 class UpdateSeverityBody(BaseModel):
+    """定义 low、medium 和 high 风险等级的部分扣分更新。"""
     low:    Optional[int] = Field(None, ge=0, description="低风险扣分值")
     medium: Optional[int] = Field(None, ge=0, description="中风险扣分值")
     high:   Optional[int] = Field(None, ge=0, description="高风险扣分值")
