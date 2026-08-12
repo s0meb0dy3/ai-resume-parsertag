@@ -47,6 +47,7 @@ from core.prompting.resume_parsing import (
     PROMPT_HR,
     RESUME_PROMPT_CACHE_KEY,
     build_text_resume_user_prompt,
+    get_resume_prompt_bundle,
 )
 from core.document_text import (
     DocumentTextUnavailableError,
@@ -431,6 +432,7 @@ def _parse_visual_images_with_llm(
     if verbose:
         logger.debug(f"视觉解析 {source_name} images={total_pages}")
 
+    prompt_hr, batch_system, prompt_cache_key = get_resume_prompt_bundle()
     indexed_images = list(enumerate(images))
     if total_pages <= PDF_MAX_PAGES_ONCE:
         content = []
@@ -441,10 +443,10 @@ def _parse_visual_images_with_llm(
         content.append({"type": "text", "text": "请将以上简历内容严格按指定JSON格式输出，直接输出JSON。"})
         raw = _call_llm_with_fallback(
             [
-                {"role": "system", "content": PROMPT_HR},
+                {"role": "system", "content": prompt_hr},
                 {"role": "user", "content": content},
             ],
-            prompt_cache_key=RESUME_PROMPT_CACHE_KEY,
+            prompt_cache_key=prompt_cache_key,
         )
         if not raw or not raw.strip():
             logger.error(f"[解析失败] 模型返回空内容，pages={total_pages}，请检查模型服务或 prompt 配置")
@@ -484,10 +486,10 @@ def _parse_visual_images_with_llm(
             try:
                 raw = _call_llm_with_fallback(
                     [
-                        {"role": "system", "content": BATCH_SYSTEM},
+                        {"role": "system", "content": batch_system},
                         {"role": "user", "content": content},
                     ],
-                    prompt_cache_key=RESUME_PROMPT_CACHE_KEY,
+                    prompt_cache_key=prompt_cache_key,
                 )
                 if not raw or not raw.strip():
                     logger.warning(f"[解析失败] 分批推理返回空内容，页码={[idx+1 for idx, _ in batch]}")
@@ -713,6 +715,7 @@ def parse_sync_resume_document(
             document.text,
             hints_payload,
         )
+        prompt_hr, _batch_system, prompt_cache_key = get_resume_prompt_bundle()
         with log_operation(
             "LLM简历语义结构化",
             file=display_filename,
@@ -720,7 +723,7 @@ def parse_sync_resume_document(
             requestedModel=get_current_model_name(),
             prefixCacheEnabled=LLM_PREFIX_CACHE_ENABLED,
             promptCacheKey=(
-                RESUME_PROMPT_CACHE_KEY
+                prompt_cache_key
                 if LLM_PREFIX_CACHE_ENABLED
                 else None
             ),
@@ -729,10 +732,10 @@ def parse_sync_resume_document(
         ) as llm_operation:
             raw = _call_llm_with_fallback(
                 [
-                    {"role": "system", "content": PROMPT_HR},
+                    {"role": "system", "content": prompt_hr},
                     {"role": "user", "content": user_content},
                 ],
-                prompt_cache_key=RESUME_PROMPT_CACHE_KEY,
+                prompt_cache_key=prompt_cache_key,
             )
             if not raw or not raw.strip():
                 raise ValueError("LLM 返回空响应")
