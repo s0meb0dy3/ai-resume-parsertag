@@ -30,16 +30,17 @@ class _ContractModel(BaseModel):
             info: Pydantic 提供的当前字段校验上下文。
 
         Returns:
-            Any: 年龄和性别使用整数，其余简单标量使用去空白字符串。
+            Any: 年龄、性别和工作年限使用整数，其余简单标量使用去空白字符串。
 
         Note:
-            无法转换的年龄和性别按 0 处理，保持既有公开 JSON 默认值。
+            无法转换的年龄、性别和工作年限按 0 处理，保持公开 JSON 默认值。
         """
-        if info.field_name in {"age", "gender"}:
+        if info.field_name in {"age", "gender", "workYears"}:
             if value in (None, ""):
                 return 0
             try:
-                return int(value)
+                normalized = int(value)
+                return max(0, normalized) if info.field_name == "workYears" else normalized
             except (TypeError, ValueError):
                 return 0
         if value is None:
@@ -57,6 +58,11 @@ class Candidate(_ContractModel):
     email: str = ""
     gender: int = 0
     age: int = 0
+    workYears: int = Field(
+        default=0,
+        ge=0,
+        description="由模型根据完整正式工作时间线计算的已满工作年数",
+    )
     address: str = ""
     nativePlace: str = ""
     selfEvaluation: str = ""

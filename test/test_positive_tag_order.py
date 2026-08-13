@@ -131,6 +131,30 @@ def test_final_response_uses_required_display_order_and_names():
     assert [item["displayName"] for item in entries] == EXPECTED_DISPLAY_NAMES
 
 
+def test_final_response_keeps_candidate_work_years():
+    """验证完整打标响应透传解析阶段生成的整数工作年限。"""
+    result = _conform_to_template(
+        "task-id",
+        {
+            "candidate": {"name": "张三", "workYears": 7},
+            "educations": [],
+            "works": [],
+            "projects": [],
+        },
+        {
+            "positiveTags": [],
+            "confidence": 0,
+            "hitTags": [],
+            "hitCount": 0,
+            "deductionScore": 0,
+            "tagParseTime": "2026-08-12 10:00:00",
+        },
+        "2026-08-12 09:59:00",
+    )
+
+    assert result["candidate"]["workYears"] == 7
+
+
 def test_positive_tag_log_uses_required_display_order_and_names():
     """验证可读打标日志按指定顺序展示五个中文维度名称。"""
     tag_info = {

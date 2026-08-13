@@ -70,6 +70,37 @@ def test_json_conversion_reports_decode_and_post_process_time(monkeypatch):
     assert fields["projects"] == 0
 
 
+def test_visual_parser_keeps_existing_multi_image_single_call(monkeypatch):
+    """验证阈值内多页图片仍在同一次模型调用中解析工作年限。"""
+    calls = []
+    monkeypatch.setattr(parser, "pil_to_base64", lambda image: "data:image/png;base64,test")
+    monkeypatch.setattr(
+        parser,
+        "get_resume_prompt_bundle",
+        lambda: ("dynamic prompt", "dynamic batch prompt", "dynamic-cache-key"),
+    )
+
+    def fake_llm(messages, prompt_cache_key=None):
+        calls.append(messages)
+        return json.dumps({
+            "candidate": {"name": "张三", "workYears": 7},
+            "educations": [],
+            "works": [],
+            "projects": [],
+        }, ensure_ascii=False)
+
+    monkeypatch.setattr(parser, "_call_llm_with_fallback", fake_llm)
+    result = parser._parse_visual_images_with_llm([object(), object()], "PDF")
+
+    assert len(calls) == 1
+    assert calls[0][0]["content"] == "dynamic prompt"
+    assert result["candidate"]["workYears"] == 7
+    assert sum(
+        item.get("type") == "image_url"
+        for item in calls[0][1]["content"]
+    ) == 2
+
+
 def test_sync_parser_extracts_text_then_calls_llm_once(monkeypatch):
     """验证文本抽取后仅调用一次 LLM 生成完整标准简历 JSON。"""
     extracted = DocumentText(

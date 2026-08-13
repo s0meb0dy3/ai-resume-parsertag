@@ -597,6 +597,13 @@
             "default": "",
             "title": "Selfevaluation",
             "type": "string"
+          },
+          "workYears": {
+            "default": 0,
+            "description": "由模型根据完整正式工作时间线计算的已满工作年数",
+            "minimum": 0.0,
+            "title": "Workyears",
+            "type": "integer"
           }
         },
         "title": "Candidate",
