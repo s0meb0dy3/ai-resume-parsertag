@@ -58,11 +58,13 @@ from core.tasks import (
     run_parse_and_tag_task,
 )
 from logger.operation import log_async_operation, log_operation, record_stage_timing
+from logger.langfuse_client import observe, update_current_observation
 
 router = APIRouter(tags=["同步与兼容接口"])
 
 
 # 同步接口使用独立的模型上下文，避免与异步任务共享 ContextVar 导致模型名互相覆盖
+@observe()
 def parse_sync_document_with_model(source, filename: str):
     """在同步接口的模型上下文中解析一份 PDF。
 
@@ -78,11 +80,18 @@ def parse_sync_document_with_model(source, filename: str):
     """
     token = set_current_model_name(SYNC_MODEL_NAME)
     try:
-        return parse_sync_resume_with_logging(source, filename)
+        resume = parse_sync_resume_with_logging(source, filename)
+        # 同步链路根 span 内部（span 活跃期）写 trace 级 input/output
+        update_current_observation(
+            input={"filename": filename},
+            output={"status": "completed", "resume": resume},
+        )
+        return resume
     finally:
         reset_current_model_name(token)
 
 
+@observe()
 def tag_sync_resume_with_model(resume: dict, job_info: dict):
     """在同步接口的模型上下文中对结构化简历打标。
 
@@ -95,7 +104,19 @@ def tag_sync_resume_with_model(resume: dict, job_info: dict):
     """
     token = set_current_model_name(SYNC_MODEL_NAME)
     try:
-        return run_tagging(resume, job_info, llm_call_fn=_call_llm_with_fallback)
+        tag_info = run_tagging(resume, job_info, llm_call_fn=_call_llm_with_fallback)
+        # 同步链路根 span 内部（span 活跃期）写 trace 级 input/output
+        update_current_observation(
+            input={
+                "resume": {
+                    "works":      len(resume.get("works") or []),
+                    "educations": len(resume.get("educations") or []),
+                    "projects":   len(resume.get("projects") or []),
+                }
+            },
+            output={"status": "completed", "tagInfo": tag_info},
+        )
+        return tag_info
     finally:
         reset_current_model_name(token)
 
@@ -363,7 +384,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
             _task_store[task_id] = rec
 
         if request.async_mode:
-            asyncio.create_task(run_parse_and_tag_task(task_id, source, filename or "resume.pdf", job_info, SYNC_MODEL_NAME))
+            asyncio.create_task(run_parse_and_tag_task(task_id, source, filename or "resume.pdf", job_info, SYNC_MODEL_NAME, trace_name="/v1/chat/completions"))
             generated_text = json.dumps(
                 {"taskId": task_id, "status": 0, "statusDesc": "待处理", "estimatedSeconds": 90},
                 ensure_ascii=False,
@@ -374,6 +395,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
                 task_id, source, filename or "resume.pdf", job_info, SYNC_MODEL_NAME,
                 parse_fn=parse_sync_resume_for_tagging_with_logging,
                 operation_name="同步解析与打标",
+                trace_name="/v1/chat/completions",
             )
             async with _task_lock:
                 rec = _task_store.get(task_id)
@@ -476,6 +498,7 @@ async def sync_parse_and_tag_resumes(request: SyncBatchRequest):
                 p["task_id"], p["source"], p["filename"], job_info, SYNC_MODEL_NAME,
                 parse_fn=parse_sync_resume_for_tagging_with_logging,
                 operation_name="同步解析与打标",
+                trace_name="/api/resume/sync/batch",
             )
 
     await asyncio.gather(*[_run_sync_parse_and_tag_item(p) for p in prepared])
@@ -560,13 +583,13 @@ async def sync_parse_resumes(request: SyncBatchRequest):
                     [item],
                 )
             except Exception as e:
-                prepared.append({"item_id": item_id, "filename": filename, "extra": extra, "error": str(e), "source": None})
+                prepared.append({"item_id": item_id, "filename": filename, "extra": extra, "error": str(e), "source": None, "sourceType": item.get("type")})
                 continue
             if source is None:
                 prepared.append({"item_id": item_id, "filename": filename, "extra": extra,
-                                  "error": "无法获取 PDF/DOCX/JPEG/PNG 简历，请检查 type/path/content 字段", "source": None})
+                                  "error": "无法获取 PDF/DOCX/JPEG/PNG 简历，请检查 type/path/content 字段", "source": None, "sourceType": item.get("type")})
                 continue
-            prepared.append({"item_id": item_id, "filename": fn or filename, "extra": extra, "source": source, "error": None})
+            prepared.append({"item_id": item_id, "filename": fn or filename, "extra": extra, "source": source, "error": None, "sourceType": item.get("type")})
 
     sem = asyncio.Semaphore(max_conc)
 

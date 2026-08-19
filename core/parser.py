@@ -32,7 +32,7 @@ from pathlib import Path
 import json_repair
 from openai import OpenAI, APIStatusError, APIConnectionError, APITimeoutError
 
-from logger.langfuse_client import observe
+from logger.langfuse_client import observe, update_current_observation
 from config import (
     MODEL_SERVICE_URL, API_KEY, MODEL_NAME, TEMPERATURE, MAX_TOKENS,
     API_TIMEOUT, MAX_RETRIES, MAX_WORKERS, PDF_MAX_PAGES_ONCE,
@@ -266,6 +266,25 @@ def _llm_try_model(messages: list, model_name: str) -> str:
     """
     return _call_llm_model_once(messages, model_name)
 
+def _sanitize_llm_messages(messages: list) -> list:
+    """观测用副本：图片消息替换为占位符，base64 不上传 Langfuse。"""
+    out = []
+    for msg in messages:
+        if not isinstance(msg, dict):
+            out.append(msg)
+            continue
+        content = msg.get("content")
+        if isinstance(content, list):
+            parts = []
+            for part in content:
+                if isinstance(part, dict) and part.get("type") == "image_url":
+                    parts.append({"type": "text", "text": "[image:redacted]"})
+                else:
+                    parts.append(part)
+            content = parts
+        out.append({**msg, "content": content})
+    return out
+
 
 @observe()
 def _call_llm_with_fallback(
@@ -289,6 +308,7 @@ def _call_llm_with_fallback(
         APIStatusError: 鉴权失败或所有模型均返回状态错误时抛出。
         Exception: 所有可用模型均失败时抛出最后一个异常。
     """
+    update_current_observation(input=_sanitize_llm_messages(messages))
     primary    = get_current_model_name()
     all_models = [primary] + FALLBACK_MODELS
     last_error: Exception | None = None
@@ -301,11 +321,13 @@ def _call_llm_with_fallback(
         _has_next = i < len(all_models) - 1
         _next_tip = "尝试下一个备用模型" if _has_next else "已无可用模型"
         try:
-            return _call_llm_model_once(
+            result = _call_llm_model_once(
                 messages,
                 model_name,
                 prompt_cache_key=prompt_cache_key,
             )
+            update_current_observation(output=result)
+            return result
         except APITimeoutError as e:
             # 必须在 APIConnectionError 之前捕获（子类）
             logger.warning(f"[LLM] model={model_name} 超时 (timeout={API_TIMEOUT}s)，{_next_tip}")
@@ -544,11 +566,16 @@ def parse_pdf_with_visual_llm(source, verbose: bool = False) -> dict:
         ValueError: PDF 加密、LLM 返回空内容或 JSON 修复后仍为空时抛出。
         Exception: PDF 渲染、模型调用或结果解析失败时向上传递。
     """
-    return _parse_visual_images_with_llm(
+    result = _parse_visual_images_with_llm(
         pdf_to_images(source),
         source_name="PDF",
         verbose=verbose,
     )
+    update_current_observation(
+        input={"sourceType": "pdf"},
+        output={"resume": result},
+    )
+    return result
 
 
 @observe()
@@ -573,11 +600,16 @@ def parse_docx_images_with_visual_llm(
         ValueError: 模型响应为空或 JSON 无效时抛出。
     """
     images = render_docx_pages(source, filename)
-    return _parse_visual_images_with_llm(
+    result = _parse_visual_images_with_llm(
         images,
         source_name="DOCX",
         verbose=verbose,
     )
+    update_current_observation(
+        input={"sourceType": "docx", "filename": filename},
+        output={"resume": result},
+    )
+    return result
 
 
 @observe()
@@ -601,11 +633,16 @@ def parse_image_with_visual_llm(
         ValueError: 模型响应为空或 JSON 无效时抛出。
     """
     image = extract_standalone_image(source, filename)
-    return _parse_visual_images_with_llm(
+    result = _parse_visual_images_with_llm(
         [image],
         source_name="IMAGE",
         verbose=verbose,
     )
+    update_current_observation(
+        input={"sourceType": "image", "filename": filename},
+        output={"resume": result},
+    )
+    return result
 
 
 # 保留旧通用名称，避免现有异步视觉解析调用方中断。
@@ -757,10 +794,18 @@ def parse_sync_resume_document(
             projects=len(result["projects"]),
         )
         if include_skill_evidence:
+            update_current_observation(
+                input={"filename": display_filename},
+                output={"resume": result, "skillEvidenceText": document.text},
+            )
             return ParsedResumeDocument(
                 resume=result,
                 skill_evidence_text=document.text,
             )
+        update_current_observation(
+            input={"filename": display_filename},
+            output={"resume": result},
+        )
         return result
 
 

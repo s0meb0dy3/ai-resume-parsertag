@@ -40,7 +40,7 @@ from core.prompting.positive_tags import (
 )
 from core.prompting.positive_value_guidance import build_positive_value_guidance
 from config import logger  # 统一使用带 ContextVar 上下文的 logger
-from logger.langfuse_client import observe
+from logger.langfuse_client import observe, update_current_observation
 from logger.operation import log_operation
 from core.resume_contract import normalize_resume_payload
 from .tag_value_id_mapper import get_tag_value_id_mapper
@@ -1242,14 +1242,23 @@ def extract_positive_tags_llm(
             )
             confs = [t["confidence"] for t in result["positiveTags"] if "confidence" in t]
             result["confidence"] = round(sum(confs) / len(confs), 2) if confs else 0.70
+            update_current_observation(
+                input={"resume": resume, "jobInfo": job_info},
+                output={"positiveResult": result},
+            )
             return result
     except Exception:
         logger.warning("LLM 正向打标失败，降级到规则层")
 
-    return extract_positive_tags_rule(
+    rule_result = extract_positive_tags_rule(
         resume,
         skill_evidence_text=skill_evidence_text,
     )
+    update_current_observation(
+        input={"resume": resume, "jobInfo": job_info},
+        output={"positiveResult": rule_result, "degraded": True},
+    )
+    return rule_result
 
 
 # 敏感词和风险检测
@@ -1436,10 +1445,18 @@ def extract_negative_tags_llm(resume: dict, neg_dims_llm: list, llm_call_fn) -> 
                 "category": dim_to_display[dim],
                 "hits": hits,
             })
+        update_current_observation(
+            input={"resume": resume, "negDims": neg_dims_llm},
+            output={"negativeHits": hit_groups},
+        )
         return hit_groups
 
     except Exception:
         logger.warning("LLM 负向打标失败，跳过 llm 类型维度")
+        update_current_observation(
+            input={"resume": resume, "negDims": neg_dims_llm},
+            output={"negativeHits": []},
+        )
         return []
 
 
@@ -1924,5 +1941,13 @@ def run_tagging(
         operation.add(
             positiveDimensions=len(result["positiveTags"]),
             negativeHits=result["hitCount"],
+        )
+        update_current_observation(
+            input={
+                "resume": resume,
+                "jobInfo": job_info,
+                "skillEvidenceText": skill_evidence_text,
+            },
+            output={"tagInfo": result},
         )
         return result
