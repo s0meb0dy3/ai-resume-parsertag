@@ -21,6 +21,7 @@
     "email": "zhangsan@example.com",
     "gender": 1,
     "age": 28,
+    "workYears": 6,
     "address": "广东省深圳市南山区",
     "nativePlace": "湖南长沙",
     "selfEvaluation": "具备多年后端开发经验，擅长微服务架构，学习能力强",

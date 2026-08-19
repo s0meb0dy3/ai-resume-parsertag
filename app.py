@@ -36,6 +36,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config import get_logger_manager, MODEL_NAME, ASYNC_MODEL_NAME, SYNC_MODEL_NAME, MODEL_SERVICE_URL, MAX_TOKENS, FALLBACK_MODELS
 from logger.logger_manager import log_context, logger
+from logger.langfuse_client import propagate_attributes, LANGFUSE_TAGS
 from logger.operation import (
     LOG_FILENAME_CONTEXT_HEADER,
     log_completion_summary,
@@ -274,7 +275,7 @@ async def _reset_log_context(request: Request, call_next):
         task_id="-",
         business_type="-",
         filename="-",
-    ):
+    ),propagate_attributes(trace_name=request.url.path, tags=LANGFUSE_TAGS):
         response = await call_next(request)
         request_ended_at = time.time()
         encoded_route_filename = response.headers.get(LOG_FILENAME_CONTEXT_HEADER)

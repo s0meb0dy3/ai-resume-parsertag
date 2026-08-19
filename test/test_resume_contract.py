@@ -18,6 +18,7 @@ def test_null_resume_collections_are_normalized():
     assert result == {
         "candidate": {
             "name": "", "phone": "", "email": "", "gender": 0, "age": 0,
+            "workYears": 0,
             "address": "", "nativePlace": "", "selfEvaluation": "",
             "expectedSalary": "", "expectedPosition": "",
         },
@@ -46,12 +47,24 @@ def test_api_schema_uses_the_same_nested_resume_contract():
     })
     assert item.resume.works == []
     assert item.resume.candidate.name == ""
+    assert item.resume.candidate.workYears == 0
 
     with pytest.raises(ValueError, match="works"):
         ParsedResumeItem.model_validate({
             "filename": "resume.pdf",
             "resume": {"works": 1},
         })
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [(7, 7), ("7", 7), (None, 0), ("未知", 0), (-2, 0)],
+)
+def test_candidate_work_years_is_normalized_to_non_negative_integer(value, expected):
+    """验证模型工作年限统一为非负整数。"""
+    result = normalize_resume_payload({"candidate": {"workYears": value}})
+
+    assert result["candidate"]["workYears"] == expected
 
 
 def test_latest_unique_empty_work_end_date_is_normalized_to_present():

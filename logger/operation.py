@@ -17,7 +17,7 @@ from datetime import datetime
 from functools import wraps
 from pathlib import Path
 from typing import Any, Iterator
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 from .logger_manager import (
     _UNSET,
@@ -91,7 +91,8 @@ def _request_filename_context(request: Any, kwargs: dict[str, Any]) -> str:
     upload_filename = getattr(upload, "filename", None)
     if upload_filename:
         filenames.append(str(upload_filename))
-    return _summarize_filenames(filenames)
+    # 请求中的文件名可能经过 URL 百分号编码，日志表头统一还原为可读文本。
+    return _summarize_filenames([unquote(filename) for filename in filenames])
 
 
 class ExecutionMetrics:

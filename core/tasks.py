@@ -232,6 +232,7 @@ async def run_parse_and_tag_task(
     model_name: str | None = None,
     parse_fn=None,
     operation_name: str = "异步解析与打标",
+    trace_name: str = "/api/resume/async/parse",
 ):
     """依次执行简历解析和标签打标，并写入任务终态。
 
@@ -257,7 +258,11 @@ async def run_parse_and_tag_task(
         business_type=operation_name,
         filename=filename,
     ), log_operation(operation_name, taskId=task_id, file=filename) as operation:
-      with propagate_attributes(tags=LANGFUSE_TAGS, session_id=task_id):
+      with propagate_attributes(tags=LANGFUSE_TAGS, session_id=task_id,trace_name=trace_name):
+        update_current_observation(input={
+            "filename": filename,
+            "businessType": operation_name,
+        })
         token = set_current_model_name(model_name) if model_name else None
         try:
             # 异步主链保持纯视觉解析；同步组合接口显式传入文本优先解析函数。
@@ -332,11 +337,8 @@ async def run_parse_and_tag_task(
 
             result_file = _save_resume_result(task_id, filename, result)
             update_current_observation(output={
-                "taskId":   task_id,
-                "filename": filename,
-                "status":   "completed",
-                "elapsed":  round(completed_at - pipeline_start, 1),
-                "confidence": result.get("tagInfo", {}).get("confidence"),
+                "status": "completed",
+                "result": result,
             })
             await _set_task_field(task_id, status=3, result=result, completed_at=completed_at)
             operation.add(
@@ -348,7 +350,7 @@ async def run_parse_and_tag_task(
             )
 
         except Exception as e:
-            update_current_observation(output={"taskId": task_id, "status": "failed", "error": str(e)})
+            update_current_observation(output={"status": "failed", "error": str(e)})
             await _set_task_field(task_id, status=4, error_msg=str(e), completed_at=time.time())
             operation.mark_failed(e)
         finally:
@@ -357,7 +359,8 @@ async def run_parse_and_tag_task(
 
 
 @observe()
-async def run_async_parse_task(task_id: str, source, filename: str, model_name: str | None = None):
+async def run_async_parse_task(task_id: str, source, filename: str, model_name: str | None = None,trace_name: str =
+ "/api/resume/async/batch/parse"):
     """单独执行多格式视觉解析，并保存可供打标接口使用的结果。
 
     Args:
@@ -375,7 +378,11 @@ async def run_async_parse_task(task_id: str, source, filename: str, model_name: 
     pipeline_start = time.time()
     with log_context(task_id=task_id, business_type="异步解析", filename=filename), \
             log_operation("异步解析", taskId=task_id, file=filename) as operation, \
-            propagate_attributes(tags=LANGFUSE_TAGS, session_id=task_id):
+            propagate_attributes(tags=LANGFUSE_TAGS, session_id=task_id, trace_name=trace_name):
+        update_current_observation(input={
+            "filename": filename,
+            "businessType": "异步解析",
+        })
         token = set_current_model_name(model_name) if model_name else None
         try:
             async with _parse_semaphore:
@@ -399,10 +406,8 @@ async def run_async_parse_task(task_id: str, source, filename: str, model_name: 
                 "resume": resume,
             }
             update_current_observation(output={
-                "taskId": task_id,
-                "filename": filename,
                 "status": "parsed",
-                "elapsed": round(completed_at - pipeline_start, 1),
+                "result": result,
             })
             await _set_task_field(task_id, status=3, result=result, completed_at=completed_at)
             operation.add(
@@ -412,7 +417,7 @@ async def run_async_parse_task(task_id: str, source, filename: str, model_name: 
                 projects=len(resume.get("projects", [])),
             )
         except Exception as e:
-            update_current_observation(output={"taskId": task_id, "status": "failed", "error": str(e)})
+            update_current_observation(output={"status": "failed", "error": str(e)})
             await _set_task_field(task_id, status=4, error_msg=str(e), completed_at=time.time())
             operation.mark_failed(e)
         finally:
@@ -428,6 +433,7 @@ async def run_async_tag_task(
     resume_parse_time: str,
     job_info: dict,
     model_name: str | None = None,
+    trace_name: str = "/api/resume/async/batch/tag"
 ):
     """对已解析的简历执行标签打标，并保存统一格式结果。
 
@@ -447,7 +453,11 @@ async def run_async_tag_task(
     loop      = asyncio.get_running_loop()
     with log_context(task_id=task_id, business_type="异步打标", filename=filename), \
             log_operation("异步打标", taskId=task_id, file=filename) as operation, \
-            propagate_attributes(tags=LANGFUSE_TAGS, session_id=task_id):
+            propagate_attributes(tags=LANGFUSE_TAGS, session_id=task_id,trace_name=trace_name):
+        update_current_observation(input={
+            "filename": filename,
+            "businessType": "异步打标",
+        })
         token = set_current_model_name(model_name) if model_name else None
         try:
             await _set_task_field(task_id, status=2)
@@ -467,11 +477,8 @@ async def run_async_tag_task(
 
             result_file = _save_resume_result(task_id, filename, result)
             update_current_observation(output={
-                "taskId": task_id,
-                "filename": filename,
                 "status": "completed",
-                "elapsed": round(tag_elapsed, 1),
-                "confidence": result.get("tagInfo", {}).get("confidence"),
+                "result": result,
             })
             await _set_task_field(task_id, status=3, result=result, completed_at=completed_at)
             operation.add(
@@ -481,7 +488,7 @@ async def run_async_tag_task(
                 resultFile=result_file,
             )
         except Exception as e:
-            update_current_observation(output={"taskId": task_id, "status": "failed", "error": str(e)})
+            update_current_observation(output={"status": "failed", "error": str(e)})
             await _set_task_field(task_id, status=4, error_msg=str(e), completed_at=time.time())
             operation.mark_failed(e)
         finally:

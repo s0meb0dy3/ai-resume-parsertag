@@ -7,6 +7,7 @@
 
 import hashlib
 import json
+from datetime import date
 
 
 POSITION_RULES = """## 4. 职位与项目角色提取规则
@@ -51,6 +52,8 @@ POSITION_RULES = """## 4. 职位与项目角色提取规则
 
 
 # 解析提示词和后处理共同依赖此结构，修改字段时必须同步更新字段白名单。
+WORK_YEARS_AS_OF_MONTH = date.today().strftime("%Y-%m")
+
 COMPANY_SCHEMA = {
     "candidate": {
         "name": "姓名，必要信息",
@@ -58,6 +61,7 @@ COMPANY_SCHEMA = {
         "email": "邮箱",
         "gender": "性别，男/女；不存在时不填",
         "age": "年龄整数；不存在时填0",
+        "workYears": "正式工作累计完整年数，非负整数；无法判断时填0",
         "address": "居住地信息，如北京市朝阳区；不存在时不填",
         "nativePlace": "籍贯信息，重要信息，需要结合原文多次确认",
         "selfEvaluation": "自我评价；不存在时不填",
@@ -110,6 +114,13 @@ PROMPT_HR = f"""# 简历结构化解析任务
 4. 只提取原文存在的信息，不得虚构或补充无证据内容。
 5. Python 确定性候选只用于提醒复核，必须回到原文确认后才能写入结果。
 
+### 2.1 工作年限计算
+
+1. `candidate.workYears` 以 {WORK_YEARS_AS_OF_MONTH} 为统计基准月份。
+2. 只累计正式工作经历，排除实习、兼职、校园经历、学生会和科研助理。
+3. 重叠任职月份只计算一次；先按月份累计，再除以 12 并向下取整。
+4. 不得依据“多年经验”等模糊自述猜测；工作时间线无法完整计算时填 `0`。
+
 ## 3. 候选人与家庭成员边界
 
 ### 3.1 候选人识别
@@ -146,7 +157,7 @@ PROMPT_HR = f"""# 简历结构化解析任务
 1. 直接输出一个 JSON 对象，不得添加说明、注释或 Markdown 代码块。
 2. 必须包含 `candidate`、`educations`、`works`、`projects` 四个顶层字段。
 3. 缺失字符串填写空字符串 `""`，缺失数组填写空数组 `[]`。
-4. 缺失数字字段 `age` 和 `gender` 填写 `0`。
+4. 缺失数字字段 `age`、`gender` 和 `workYears` 填写 `0`。
 5. 公司、学校和项目名称保留原文，不得改写、缩写或合并不同机构。
 6. 禁止根据常识、岗位名称或上下文猜测原文没有的信息。
 7. 禁止把 Python 候选对象或章节边界写入最终 JSON。
@@ -213,6 +224,28 @@ BATCH_SYSTEM = PROMPT_HR + """
 """
 
 
+def get_resume_prompt_bundle(as_of_date: date | None = None) -> tuple[str, str, str]:
+    """按请求统计月份构造解析 Prompt、分批 Prompt 和缓存键。
+
+    Args:
+        as_of_date (date | None): 工作年限统计日期；为空时读取当前日期。
+
+    Returns:
+        tuple[str, str, str]: 完整解析 Prompt、部分页面 Prompt 和对应缓存键。
+
+    Note:
+        模块级常量保留给兼容调用方；解析主链应调用本函数，避免常驻进程跨月后
+        继续使用启动月份。一次文档解析只调用一次，以保证所有页面批次口径一致。
+    """
+    as_of_month = (as_of_date or date.today()).strftime("%Y-%m")
+    prompt_hr = PROMPT_HR.replace(WORK_YEARS_AS_OF_MONTH, as_of_month)
+    batch_system = BATCH_SYSTEM.replace(WORK_YEARS_AS_OF_MONTH, as_of_month)
+    cache_key = "resume-parse-" + hashlib.sha256(
+        prompt_hr.encode("utf-8")
+    ).hexdigest()[:16]
+    return prompt_hr, batch_system, cache_key
+
+
 # 字段白名单供后处理执行确定性补全与裁剪。
 SCHEMA_KEYS = {"candidate", "educations", "works", "projects"}
 CANDIDATE_KEYS = {
@@ -221,6 +254,7 @@ CANDIDATE_KEYS = {
     "email",
     "gender",
     "age",
+    "workYears",
     "address",
     "nativePlace",
     "selfEvaluation",

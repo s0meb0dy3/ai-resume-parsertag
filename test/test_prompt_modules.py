@@ -1,5 +1,6 @@
 """验证细分 Prompt 模块的职责边界、格式和旧入口兼容性。"""
 
+from datetime import date
 import json
 from pathlib import Path
 
@@ -17,7 +18,12 @@ from core.prompting.positive_value_guidance import (
     VALUE_GUIDANCE_BY_DIMENSION,
     build_positive_value_guidance,
 )
-from core.prompting.resume_parsing import BATCH_SYSTEM, COMPANY_SCHEMA, PROMPT_HR
+from core.prompting.resume_parsing import (
+    BATCH_SYSTEM,
+    COMPANY_SCHEMA,
+    PROMPT_HR,
+    get_resume_prompt_bundle,
+)
 from tag.tag_value_id_mapper import get_tag_value_id_mapper
 from tag.tagger import _build_negative_prompt, _build_positive_prompt
 
@@ -51,8 +57,25 @@ def test_resume_prompt_uses_numbered_sections_and_explicit_output_contract():
 
     assert positions == sorted(positions)
     assert all(key in PROMPT_HR for key in COMPANY_SCHEMA)
+    assert "candidate.workYears" in PROMPT_HR
     assert BATCH_SYSTEM.startswith(PROMPT_HR)
     assert "## 8. 部分页面处理" in BATCH_SYSTEM
+
+
+def test_resume_prompt_bundle_refreshes_month_and_cache_key():
+    """验证常驻进程跨月后使用新月份及其独立缓存键。"""
+    august_prompt, august_batch, august_key = get_resume_prompt_bundle(
+        date(2026, 8, 31)
+    )
+    september_prompt, september_batch, september_key = get_resume_prompt_bundle(
+        date(2026, 9, 1)
+    )
+
+    assert "2026-08" in august_prompt
+    assert "2026-08" in august_batch
+    assert "2026-09" in september_prompt
+    assert "2026-09" in september_batch
+    assert august_key != september_key
 
 
 def test_positive_prompt_injects_runtime_values_into_structured_sections():

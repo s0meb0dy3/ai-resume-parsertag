@@ -2,7 +2,7 @@
 解析结果后处理、Schema 校验与多批次合并。
 
 职责：
-  _post_process    : 字段类型规范化（gender int、age int、移除 other）
+  _post_process    : 字段类型规范化（gender、age、workYears 转 int，移除 other）
   _validate_schema : Schema 校验与补全（缺失字段补默认值、多余字段裁剪）
   _merge_results   : 多批次合并去重（candidate 字段合并、列表去重）
   _conform_to_template: 拼装最终 API 响应结构（含正负向标签）
@@ -65,7 +65,7 @@ def _build_display_maps(cfg: dict) -> tuple[dict, dict]:
 # 字段类型规范化
 
 def _post_process(data: dict) -> dict:
-    """将候选人性别和年龄归一为最终 Schema 使用的数值。
+    """将候选人性别、年龄和工作年限归一为最终 Schema 使用的数值。
 
     Args:
         data (dict): LLM 返回的简历对象。
@@ -86,6 +86,8 @@ def _post_process(data: dict) -> dict:
         else:               c["gender"] = int(g) if str(g).isdigit() else 0
         age = str(c.get("age", "0")).strip()
         c["age"] = int(age) if age.isdigit() else 0
+        work_years = str(c.get("workYears", "0")).strip()
+        c["workYears"] = int(work_years) if work_years.isdigit() else 0
         c.pop("other", None)
     return data
 
@@ -128,7 +130,7 @@ def _validate_schema(data: dict) -> tuple:
             report["fixes"].append(f"移除 candidate 多余字段: {key}")
     for key in CANDIDATE_KEYS:
         if key not in c:
-            c[key] = ""
+            c[key] = 0 if key in {"gender", "age", "workYears"} else ""
             report["fixes"].append(f"candidate 缺失字段: {key}")
 
     if not isinstance(data.get("educations"), list):
@@ -205,7 +207,7 @@ def _merge_candidate(a: dict, b: dict) -> dict:
     result = {}
     for k in set(list(a.keys()) + list(b.keys())):
         va, vb = a.get(k, ""), b.get(k, "")
-        if k in ("gender", "age"):
+        if k in ("gender", "age", "workYears"):
             result[k] = va if (va and va != 0) else vb
         elif k in _FIRST_WINS:
             result[k] = str(va).strip() if str(va).strip() else str(vb).strip()
@@ -296,6 +298,7 @@ def _conform_to_template(task_id: str, resume: dict, tag_info: dict, resume_pars
         "email":            c.get("email", ""),
         "gender":           c.get("gender", 0),
         "age":              c.get("age", 0),
+        "workYears":        c.get("workYears", 0),
         "address":          c.get("address", ""),
         "nativePlace":      c.get("nativePlace", ""),
         "selfEvaluation":   c.get("selfEvaluation", ""),

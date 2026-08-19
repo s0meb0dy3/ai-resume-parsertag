@@ -166,7 +166,7 @@ async def test_async_operation_uses_single_request_filename_in_log_context():
     """验证同步接口完成摘要表头展示唯一文件名。"""
 
     class Request:
-        resumes = [{"file": {"name": "java开发工程师_深圳.pdf"}}]
+        resumes = [{"file": {"name": "java%E5%BC%80%E5%8F%91%E5%B7%A5%E7%A8%8B%E5%B8%88_%E6%B7%B1%E5%9C%B3.pdf"}}]
 
     @log_async_operation("同步解析")
     async def demo_sync_parse(request):

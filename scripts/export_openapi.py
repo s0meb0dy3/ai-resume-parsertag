@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import sys
 from pathlib import Path
@@ -68,6 +69,47 @@ def export_openapi_document(output_path: Path) -> None:
     )
 
 
+def _normalize_generator_differences(document: dict) -> dict:
+    """归一不同依赖版本产生的等价 OpenAPI Schema 表示。
+
+    Args:
+        document (dict): 已提交或由当前 FastAPI 应用生成的 OpenAPI 对象。
+
+    Returns:
+        dict: 深拷贝并归一文件上传格式与校验错误内部字段后的 OpenAPI 对象。
+
+    Note:
+        Pydantic 版本差异可能把上传文件表示为 ``format=binary`` 或
+        ``contentMediaType=application/octet-stream``，也可能增删
+        ``ValidationError.ctx`` 和 ``ValidationError.input``。这些差异不改变
+        业务接口语义，仅在契约比较时归一；原始文档不会被修改。
+    """
+    normalized = copy.deepcopy(document)
+
+    def visit(value) -> None:
+        """递归统一 OpenAPI 对象中的二进制字符串表示。"""
+        if isinstance(value, dict):
+            if value.get("type") == "string" and value.get("format") == "binary":
+                value.pop("format")
+                value["contentMediaType"] = "application/octet-stream"
+            for child in value.values():
+                visit(child)
+        elif isinstance(value, list):
+            for child in value:
+                visit(child)
+
+    visit(normalized)
+    validation_properties = (
+        normalized.get("components", {})
+        .get("schemas", {})
+        .get("ValidationError", {})
+        .get("properties", {})
+    )
+    validation_properties.pop("ctx", None)
+    validation_properties.pop("input", None)
+    return normalized
+
+
 def check_openapi_document(output_path: Path) -> bool:
     """检查已提交规范是否与当前应用生成结果完全一致。
 
@@ -83,7 +125,9 @@ def check_openapi_document(output_path: Path) -> bool:
         committed_document = json.loads(output_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return False
-    return committed_document == build_openapi_document()
+    return _normalize_generator_differences(
+        committed_document
+    ) == _normalize_generator_differences(build_openapi_document())
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
