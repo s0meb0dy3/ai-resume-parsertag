@@ -289,6 +289,41 @@ async def test_http_middleware_logs_tag_config_json_response():
 
 
 @pytest.mark.asyncio
+async def test_http_middleware_logs_client_ip():
+    """验证统一中间件记录代理传入的调用方 IP。"""
+    scope = {
+        "type": "http",
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": "/api/resume/sync/tag",
+        "raw_path": b"/api/resume/sync/tag",
+        "query_string": b"",
+        "headers": [(b"x-forwarded-for", b"10.2.5.123, 10.42.0.1")],
+        "client": ("10.42.0.1", 12345),
+        "server": ("127.0.0.1", 21804),
+        "root_path": "",
+    }
+    request = Request(scope)
+
+    async def call_next(_request):
+        return JSONResponse(content={"code": 0})
+
+    with patch("app.logger.info") as info_log, patch(
+        "app.log_completion_summary"
+    ), patch("app.log_json_response"):
+        await app_module._reset_log_context(request, call_next)
+
+    access_message = next(
+        call.args[0] for call in info_log.call_args_list
+        if call.args[0].startswith("[API访问]")
+    )
+    assert "method=POST path=/api/resume/sync/tag" in access_message
+    assert "clientIp=10.2.5.123 statusCode=200" in access_message
+    assert re.search(r"durationMs=\d+$", access_message)
+
+
+@pytest.mark.asyncio
 async def test_http_middleware_uses_response_filename_for_sync_parse_json():
     """验证同步仅解析的完整 JSON 日志表头展示单项文件名。"""
     scope = {
