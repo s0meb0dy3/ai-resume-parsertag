@@ -324,6 +324,36 @@ async def test_http_middleware_logs_client_ip():
 
 
 @pytest.mark.asyncio
+async def test_http_middleware_skips_health_access_log():
+    """验证 Kubernetes 健康探针不产生 API 访问日志。"""
+    scope = {
+        "type": "http",
+        "http_version": "1.1",
+        "method": "GET",
+        "scheme": "http",
+        "path": "/health",
+        "raw_path": b"/health",
+        "query_string": b"",
+        "headers": [],
+        "client": ("10.199.20.1", 12345),
+        "server": ("127.0.0.1", 21804),
+        "root_path": "",
+    }
+    request = Request(scope)
+
+    async def call_next(_request):
+        return JSONResponse(content={"status": "healthy"})
+
+    with patch("app.logger.info") as info_log:
+        await app_module._reset_log_context(request, call_next)
+
+    assert not any(
+        call.args[0].startswith("[API访问]")
+        for call in info_log.call_args_list
+    )
+
+
+@pytest.mark.asyncio
 async def test_http_middleware_uses_response_filename_for_sync_parse_json():
     """验证同步仅解析的完整 JSON 日志表头展示单项文件名。"""
     scope = {
