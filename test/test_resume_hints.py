@@ -85,5 +85,5 @@ def test_text_resume_prompt_keeps_fixed_prefix_and_marks_hints_untrusted():
     assert prompt.index("张三\n测试大学") < prompt.index('"nameCandidates"')
     assert "只用于防遗漏核对，不是最终事实" in prompt
     assert "候选错误或无原文支持时忽略" in prompt
-    assert "Python 确定性候选只用于提醒复核" in PROMPT_HR
+    assert "Python 确定性候选只用于提醒复核" not in PROMPT_HR
     assert RESUME_PROMPT_CACHE_KEY.startswith("resume-parse-")
