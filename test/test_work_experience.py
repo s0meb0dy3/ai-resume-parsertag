@@ -54,6 +54,67 @@ def test_campus_status_is_not_the_same_as_less_than_one_year():
     assert _map_work_years(0.5) == "1年以下"
 
 
+def test_recent_postgraduate_graduation_takes_campus_priority():
+    """验证工作后继续升学并在应届窗口毕业时仍判为应届。"""
+    result = calculate_work_experience(
+        _resume(
+            works=[{
+                "company": "某科技公司",
+                "position": "开发工程师",
+                "startDate": "2021-07",
+                "endDate": "2023-08",
+            }],
+            educations=[
+                {
+                    "education": "本科",
+                    "startDate": "2017-09",
+                    "endDate": "2021-06",
+                },
+                {
+                    "education": "硕士研究生",
+                    "startDate": "2023-09",
+                    "endDate": "2026-06",
+                },
+            ],
+        ),
+        as_of_date=date(2026, 8, 3),
+    )
+
+    assert result.full_time_months == 25
+    assert result.graduate_status == "campus"
+    assert result.work_years_band == "应届"
+
+
+def test_latest_education_requires_explicit_current_marker():
+    """验证明确在读判为应届，而空结束时间不会被规则层自行推断。"""
+    educations = [
+        {
+            "education": "本科",
+            "startDate": "2020-09",
+            "endDate": "2024-07",
+        },
+        {
+            "education": "硕士研究生",
+            "startDate": "2024-09",
+            "endDate": "至今",
+        },
+    ]
+    enrolled = calculate_work_experience(
+        _resume(educations=educations),
+        as_of_date=date(2026, 8, 3),
+    )
+    educations[-1]["endDate"] = ""
+    missing_end = calculate_work_experience(
+        _resume(educations=educations),
+        as_of_date=date(2026, 8, 3),
+    )
+
+    assert enrolled.graduate_status == "campus"
+    assert enrolled.work_years_band == "应届"
+    assert missing_end.graduate_status == "alumni"
+    assert missing_end.work_years_band == "往届无经验"
+
+
 def test_alumni_without_formal_experience_has_an_explicit_band():
     """验证已过应届窗口且无正式经历时输出往届无经验。"""
     result = calculate_work_experience(

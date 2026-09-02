@@ -67,8 +67,8 @@ def test_candidate_work_years_is_normalized_to_non_negative_integer(value, expec
     assert result["candidate"]["workYears"] == expected
 
 
-def test_latest_unique_empty_work_end_date_is_normalized_to_present():
-    """验证唯一且最新的空结束日期被识别为当前任职。"""
+def test_empty_work_end_date_is_not_inferred_as_present():
+    """验证缺失的工作结束日期保持为空，不被推断为当前任职。"""
     result = normalize_resume_payload({
         "works": [
             {
@@ -82,7 +82,7 @@ def test_latest_unique_empty_work_end_date_is_normalized_to_present():
         ],
     })
 
-    assert result["works"][1]["endDate"] == "至今"
+    assert result["works"][1]["endDate"] == ""
 
 
 def test_work_keeps_original_public_schema():
@@ -115,8 +115,8 @@ def test_current_work_end_date_aliases_are_normalized(current_value):
     assert result["works"][0]["endDate"] == "至今"
 
 
-def test_ambiguous_or_historical_empty_end_dates_are_not_assumed_current():
-    """验证多个空日期和非最新空日期不会被武断填成当前任职。"""
+def test_all_empty_work_end_dates_remain_empty():
+    """验证多个或历史工作结束日期缺失时均保持为空。"""
     multiple = normalize_resume_payload({
         "works": [
             {"company": "A", "position": "工程师", "startDate": "2020-01"},

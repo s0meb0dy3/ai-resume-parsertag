@@ -5,7 +5,6 @@
 """
 from __future__ import annotations
 
-import re
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -84,9 +83,6 @@ class Education(_ContractModel):
 _CURRENT_END_DATE_VALUES = {
     "至今", "目前", "现在", "在职", "今", "current", "present", "now",
 }
-_START_DATE_RE = re.compile(r"^\s*(\d{4})(?:[-./年](\d{1,2}))?")
-
-
 class Work(_ContractModel):
     """定义单条工作经历的公司、职位、职责和时间字段。"""
 
@@ -152,43 +148,6 @@ class ResumeData(BaseModel):
             elif not isinstance(field_value, list):
                 raise ValueError(f"resume.{field_name} 必须是 JSON array 或 null")
         return normalized
-
-    @model_validator(mode="after")
-    def _normalize_current_work(self):
-        """保守地将最新且唯一的空结束日期识别为当前任职。"""
-        if any(work.endDate == "至今" for work in self.works):
-            return self
-        empty_indexes = [
-            index for index, work in enumerate(self.works)
-            if not work.endDate and _work_start_key(work.startDate) is not None
-            and any((work.company, work.position, work.description))
-        ]
-        if len(empty_indexes) != 1:
-            return self
-        candidate_index = empty_indexes[0]
-        dated_works = [
-            (index, _work_start_key(work.startDate))
-            for index, work in enumerate(self.works)
-            if _work_start_key(work.startDate) is not None
-        ]
-        if dated_works and candidate_index in {
-            index for index, key in dated_works
-            if key == max(item_key for _, item_key in dated_works)
-        }:
-            self.works[candidate_index].endDate = "至今"
-        return self
-
-
-def _work_start_key(value: str) -> tuple[int, int] | None:
-    """提取工作开始日期的年月排序键，仅用于识别最新记录。"""
-    match = _START_DATE_RE.match(str(value or ""))
-    if not match:
-        return None
-    year = int(match.group(1))
-    month = int(match.group(2) or 1)
-    if not 1 <= month <= 12:
-        return None
-    return year, month
 
 
 def normalize_resume_payload(value: Any) -> dict:
