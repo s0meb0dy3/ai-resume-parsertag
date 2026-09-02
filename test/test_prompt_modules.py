@@ -20,7 +20,6 @@ from core.prompting.positive_value_guidance import (
 )
 from core.prompting.resume_parsing import (
     BATCH_SYSTEM,
-    COMPANY_SCHEMA,
     PROMPT_HR,
     get_resume_prompt_bundle,
 )
@@ -34,7 +33,6 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_compatibility_module_reexports_split_prompt_constants():
     """验证旧导入路径继续返回细分模块中的同一组常量对象。"""
     assert compatibility_prompts.PROMPT_HR is PROMPT_HR
-    assert compatibility_prompts.COMPANY_SCHEMA is COMPANY_SCHEMA
     assert compatibility_prompts.POSITIVE_PROMPT_HEADER is POSITIVE_PROMPT_HEADER
     assert compatibility_prompts.POSITIVE_TAG_SCHEMA is POSITIVE_TAG_SCHEMA
     assert compatibility_prompts.NEGATIVE_PROMPT_HEADER is NEGATIVE_PROMPT_HEADER
@@ -43,23 +41,33 @@ def test_compatibility_module_reexports_split_prompt_constants():
 
 
 def test_resume_prompt_uses_numbered_sections_and_explicit_output_contract():
-    """验证解析提示词按读取顺序呈现任务、边界、步骤和输出约束。"""
+    """验证精简后的解析提示词按读取顺序呈现任务、边界和输出约束。"""
     headings = [
-        "## 1. 角色",
-        "## 2. 任务目标",
-        "## 3. 候选人与家庭成员边界",
-        "## 4. 职位与项目角色提取规则",
-        "## 5. JSON 字段结构",
-        "## 6. 执行步骤",
-        "## 7. 输出硬约束",
+        "## 1. 任务目标",
+        "## 2. 职位与项目角色提取规则",
+        "## 3. JSON 字段结构",
+        "## 4. 输出硬约束",
     ]
     positions = [PROMPT_HR.index(heading) for heading in headings]
 
     assert positions == sorted(positions)
-    assert all(key in PROMPT_HR for key in COMPANY_SCHEMA)
+    assert all(f'"{key}"' in PROMPT_HR for key in ("candidate", "educations", "works", "projects"))
+    assert '"gender": "性别编码：男=1，女=2，未知=0"' in PROMPT_HR
+    assert "原文明确写至今、在读、目前等仍在读状态时统一填至今" in PROMPT_HR
+    assert "原文未提供结束日期时留空，不得根据学制推测" in PROMPT_HR
+    assert "原文明确写至今、目前、现在等仍在职状态时统一填至今" in PROMPT_HR
+    assert "原文明确写至今、目前、现在等仍在进行状态时统一填至今" in PROMPT_HR
+    assert PROMPT_HR.count("原文未提供时留空，不得推断") == 4
     assert "candidate.workYears" in PROMPT_HR
+    assert "你是专业的简历解析助手" not in PROMPT_HR
+    assert "候选人与家庭成员边界" not in PROMPT_HR
+    assert "## 6. 执行步骤" not in PROMPT_HR
+    assert "根据职责中的明确证据选择最匹配的职位关键词" not in PROMPT_HR
+    assert "仅在职责存在明确证据时补充最匹配的通用名称" in PROMPT_HR
+    assert "除第 2 节允许的职位或项目角色补全外" in PROMPT_HR
+    assert "Python 确定性候选只用于提醒复核" not in PROMPT_HR
     assert BATCH_SYSTEM.startswith(PROMPT_HR)
-    assert "## 8. 部分页面处理" in BATCH_SYSTEM
+    assert "## 5. 部分页面处理" in BATCH_SYSTEM
 
 
 def test_resume_prompt_bundle_refreshes_month_and_cache_key():

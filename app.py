@@ -278,6 +278,22 @@ async def _reset_log_context(request: Request, call_next):
     ),propagate_attributes(trace_name=request.url.path, tags=LANGFUSE_TAGS):
         response = await call_next(request)
         request_ended_at = time.time()
+        # 健康探针调用频繁且不属于业务访问，不写入 API 访问日志。
+        if request.url.path != "/health":
+            # 经 Kubernetes 网关或反向代理调用时，客户端地址通常位于
+            # X-Forwarded-For 的第一项；直连服务时回退到 ASGI 连接地址。
+            forwarded_for = request.headers.get("x-forwarded-for", "")
+            client_ip = (
+                forwarded_for.split(",", 1)[0].strip()
+                if forwarded_for
+                else (request.client.host if request.client else "-")
+            )
+            # 在全局中间件统一记录，新增路由也能直接按接口或 IP 在 Loki 检索。
+            logger.info(
+                f"[API访问] method={request.method} path={request.url.path} "
+                f"clientIp={client_ip} statusCode={response.status_code} "
+                f"durationMs={round((request_ended_at - request_started_at) * 1000)}"
+            )
         encoded_route_filename = response.headers.get(LOG_FILENAME_CONTEXT_HEADER)
         route_filename_context = (
             unquote(encoded_route_filename) if encoded_route_filename else "-"

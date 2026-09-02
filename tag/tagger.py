@@ -379,9 +379,10 @@ def calculate_work_experience(
         WorkExperienceSummary: 身份、正式和实习月份、年限档位及质量摘要。
 
     Note:
-        只有毕业时间位于应届窗口且没有正式工作证据时才判为 `campus`；
-        毕业时间早于应届窗口且没有正式工作证据时判为 `alumni`。
-        正式工作区间先合并重叠月份，实习和兼职不会进入正式年限档位。
+        最新学历仍在读，或最近毕业时间位于应届窗口时判为 `campus`，历史
+        正式工作经历不取消应届身份；毕业时间早于应届窗口且没有正式工作
+        证据时判为 `alumni`。正式工作区间先合并重叠月份，实习和兼职不会
+        进入正式年限档位。
     """
     current = as_of_date or date.today()
     full_time_intervals: list[tuple[int, int]] = []
@@ -411,25 +412,48 @@ def calculate_work_experience(
             full_time_intervals.append((_to_month_index(start), _to_month_index(end)))
 
     full_time_months = _merged_interval_months(full_time_intervals)
+
+    # 按开始时间选择最新学历，用它判断候选人当前是否仍在读。
+    educations = resume.get("educations", [])
+    dated_educations = [
+        (start, education)
+        for education in educations
+        if (start := _parse_date(education.get("startDate", ""), current))
+    ]
+    latest_education = max(
+        dated_educations, key=lambda item: item[0], default=(None, None)
+    )[1]
+    current_end_values = {
+        "至今", "在读", "目前", "现在", "今", "current", "present", "now",
+    }
+    latest_end = str((latest_education or {}).get("endDate", "")).strip().lower()
+    # 只有原文明示“至今/在读”等状态时才视为在读，空结束时间不做推断。
+    is_currently_enrolled = latest_end in current_end_values
+
+    # “至今”等在读标记不是毕业时间；其余有效结束时间中取最近一次毕业时间。
     graduation_dates = [
         parsed
-        for education in resume.get("educations", [])
-        if isinstance(education, dict)
-        for parsed in [_parse_date(education.get("endDate", ""), current)]
-        if parsed is not None
+        for education in educations
+        if str(education.get("endDate", "")).strip().lower() not in current_end_values
+        if (parsed := _parse_date(education.get("endDate", ""), current))
     ]
-    latest_graduation = max(graduation_dates) if graduation_dates else None
+    latest_graduation = max(graduation_dates, default=None)
     window_start = datetime(current.year, current.month, 1) - relativedelta(
         months=graduate_window_before_months
     )
     window_end = datetime(current.year, current.month, 1) + relativedelta(
         months=graduate_window_after_months
     )
+
+    # 应届优先：最新学历在读或最近毕业时间在窗口内，历史正式工作不取消应届身份。
     is_campus = bool(
-        latest_graduation
-        and window_start <= latest_graduation <= window_end
-        and not formal_work_evidence
+        is_currently_enrolled
+        or (
+            latest_graduation
+            and window_start <= latest_graduation <= window_end
+        )
     )
+    # 非应届候选人已超过毕业窗口且没有正式工作证据时，判为往届无经验。
     is_alumni_without_experience = bool(
         latest_graduation
         and latest_graduation < window_start
@@ -1233,7 +1257,7 @@ def extract_positive_tags_llm(
         ])
         result = json_repair.loads(raw)
         if isinstance(result, dict) and "positiveTags" in result:
-            result["positiveTags"] = _normalize_positive_tags(
+            result["positiveTags"] = _normalize_positive_tags( # 此处用规则代码重新覆盖education和workyears
                 result["positiveTags"],
                 resume,
                 pos_dims,
