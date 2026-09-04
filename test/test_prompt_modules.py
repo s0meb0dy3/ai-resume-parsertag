@@ -54,6 +54,9 @@ def test_resume_prompt_uses_numbered_sections_and_explicit_output_contract():
     assert all(f'"{key}"' in PROMPT_HR for key in ("candidate", "educations", "works", "projects"))
     assert '"gender": "性别编码：男=1，女=2，未知=0"' in PROMPT_HR
     assert "原文明确写至今、在读、目前等仍在读状态时统一填至今" in PROMPT_HR
+    assert "教育经历按学历层级从高到低输出" in PROMPT_HR
+    assert "博士/博士研究生 > 硕士/硕士研究生 > 本科/学士 > 专科及以下" in PROMPT_HR
+    assert "同层级按 `startDate` 从新到旧排列" in PROMPT_HR
     assert "原文未提供结束日期时留空，不得根据学制推测" in PROMPT_HR
     assert "原文明确写至今、目前、现在等仍在职状态时统一填至今" in PROMPT_HR
     assert "原文明确写至今、目前、现在等仍在进行状态时统一填至今" in PROMPT_HR

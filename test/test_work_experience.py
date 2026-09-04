@@ -85,8 +85,8 @@ def test_recent_postgraduate_graduation_takes_campus_priority():
     assert result.work_years_band == "应届"
 
 
-def test_latest_education_requires_explicit_current_marker():
-    """验证明确在读判为应届，而空结束时间不会被规则层自行推断。"""
+def test_latest_education_empty_end_date_is_treated_as_current():
+    """验证最新学历明确在读或结束时间为空时均判为应届。"""
     educations = [
         {
             "education": "本科",
@@ -111,8 +111,8 @@ def test_latest_education_requires_explicit_current_marker():
 
     assert enrolled.graduate_status == "campus"
     assert enrolled.work_years_band == "应届"
-    assert missing_end.graduate_status == "alumni"
-    assert missing_end.work_years_band == "往届无经验"
+    assert missing_end.graduate_status == "campus"
+    assert missing_end.work_years_band == "应届"
 
 
 def test_alumni_without_formal_experience_has_an_explicit_band():

@@ -379,10 +379,10 @@ def calculate_work_experience(
         WorkExperienceSummary: 身份、正式和实习月份、年限档位及质量摘要。
 
     Note:
-        最新学历仍在读，或最近毕业时间位于应届窗口时判为 `campus`，历史
-        正式工作经历不取消应届身份；毕业时间早于应届窗口且没有正式工作
-        证据时判为 `alumni`。正式工作区间先合并重叠月份，实习和兼职不会
-        进入正式年限档位。
+        最新学历结束时间为空或明确为在读状态，或最近毕业时间位于应届窗口
+        时判为 `campus`，历史正式工作经历不取消应届身份；毕业时间早于应届
+        窗口且没有正式工作证据时判为 `alumni`。正式工作区间先合并重叠月份，
+        实习和兼职不会进入正式年限档位。
     """
     current = as_of_date or date.today()
     full_time_intervals: list[tuple[int, int]] = []
@@ -424,13 +424,17 @@ def calculate_work_experience(
         dated_educations, key=lambda item: item[0], default=(None, None)
     )[1]
     current_end_values = {
-        "至今", "在读", "目前", "现在", "今", "current", "present", "now",
+        "", "至今", "在读", "目前", "现在", "今", "current", "present", "now",
     }
     latest_end = str((latest_education or {}).get("endDate", "")).strip().lower()
-    # 只有原文明示“至今/在读”等状态时才视为在读，空结束时间不做推断。
-    is_currently_enrolled = latest_end in current_end_values
+    # 按业务规则，最新学历结束时间为空或明确为“至今/在读”等状态时均视为在读。
+    # 必须实际存在可按开始时间识别的最新学历，避免空教育数组被误判为应届。
+    is_currently_enrolled = bool(
+        latest_education is not None and latest_end in current_end_values
+    )
 
-    # “至今”等在读标记不是毕业时间；其余有效结束时间中取最近一次毕业时间。
+    # 当前状态（含最新学历空结束时间）不是毕业时间；其余有效结束时间中取
+    # 最近一次毕业时间。
     graduation_dates = [
         parsed
         for education in educations
