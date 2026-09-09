@@ -9,9 +9,11 @@ from __future__ import annotations
 
 import io
 import inspect
+import math
 import posixpath
 import re
 import zipfile
+from collections import Counter
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -55,6 +57,26 @@ _PDF_SCHOOL_RE = re.compile(
 )
 _PDF_PHONE_RE = re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)")
 _PDF_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+_LOW_CJK_ENTROPY_MIN_CHARS = 100
+_LOW_CJK_ENTROPY_THRESHOLD = 3.0
+
+
+def is_low_entropy_cjk_text(text: str) -> bool:
+    """判断抽取文本是否因汉字映射塌缩而明显异常。
+
+    少于 100 个汉字时样本不足，不进行熵判断；样本充足且 Shannon 信息熵
+    低于 3.0 时，认为大量字形可能被错误映射成少量汉字，应改走视觉解析。
+    """
+    han_chars = re.findall(r"[\u4e00-\u9fff]", text or "")
+    if len(han_chars) < _LOW_CJK_ENTROPY_MIN_CHARS:
+        return False
+    counts = Counter(han_chars)
+    total = len(han_chars)
+    entropy = -sum(
+        (count / total) * math.log2(count / total)
+        for count in counts.values()
+    )
+    return entropy < _LOW_CJK_ENTROPY_THRESHOLD
 
 
 class DocumentExtractionError(ValueError):

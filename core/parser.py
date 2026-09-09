@@ -54,6 +54,7 @@ from core.document_text import (
     detect_document_type,
     extract_document_text,
     extract_standalone_image,
+    is_low_entropy_cjk_text,
     render_docx_pages,
 )
 from core.resume_contract import normalize_resume_payload
@@ -690,6 +691,11 @@ def parse_sync_resume_document(
             if document.document_type in {"pdf", "image"} and not document.text:
                 raise DocumentTextUnavailableError(
                     f"{document.document_type.upper()} 没有可用文本，执行视觉解析"
+                )
+            # 大量汉字被错误映射成少数字符时，文本虽然非空但不可用于语义解析。
+            if is_low_entropy_cjk_text(document.text):
+                raise DocumentTextUnavailableError(
+                    f"{document.document_type.upper()} 抽取文本汉字信息熵过低，执行视觉解析"
                 )
         except DocumentTextUnavailableError as exc:
             suffix = Path(display_filename).suffix.lower()

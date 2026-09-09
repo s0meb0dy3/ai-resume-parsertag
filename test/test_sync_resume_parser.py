@@ -338,6 +338,45 @@ def test_sync_parser_uses_visual_fallback_for_textless_pdf(monkeypatch):
     assert result["candidate"]["name"] == "扫描候选人"
 
 
+def test_sync_parser_uses_visual_fallback_for_low_entropy_pdf_text(monkeypatch):
+    """验证汉字信息熵过低的非空 PDF 文本跳过文本模型并进入视觉解析。"""
+    monkeypatch.setattr(
+        parser,
+        "extract_document_text",
+        lambda source, filename: DocumentText(
+            text="年" * 100,
+            document_type="pdf",
+            extractor="pymupdf4llm",
+            character_count=100,
+            page_count=1,
+        ),
+    )
+    visual_calls = []
+
+    def fake_visual(source, verbose=False):
+        visual_calls.append((source, verbose))
+        return {
+            "candidate": {"name": "视觉候选人"},
+            "educations": [],
+            "works": [],
+            "projects": [],
+        }
+
+    monkeypatch.setattr(parser, "parse_pdf_with_visual_llm", fake_visual)
+    monkeypatch.setattr(
+        parser,
+        "_call_llm_with_fallback",
+        lambda *args, **kwargs: pytest.fail(
+            "low-entropy text must not enter text LLM"
+        ),
+    )
+
+    result = parser.parse_sync_resume_document(b"garbled", "garbled.pdf")
+
+    assert visual_calls == [(b"garbled", True)]
+    assert result["candidate"]["name"] == "视觉候选人"
+
+
 def test_sync_parser_uses_visual_fallback_for_image_only_docx(monkeypatch):
     """验证无文本 DOCX 使用独立的正文图片视觉解析器。"""
     monkeypatch.setattr(

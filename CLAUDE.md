@@ -14,7 +14,7 @@ FastAPI/Pydantic 和 `docs/openapi.json` 为准，标签值以运行时配置与
 ```text
 文件输入
 -> 真实类型与资源预算校验
--> 同步：PDF/DOCX 文本优先抽取，扫描 PDF、图片型 DOCX、独立图片走视觉降级
+-> 同步：PDF/DOCX 文本优先抽取，无文本、汉字低熵乱码、图片型文档走视觉降级
 -> 异步：PDF 页面直接走视觉解析，不执行 Python 文本抽取
 -> LLM 生成标准 Resume
 -> Resume 契约归一

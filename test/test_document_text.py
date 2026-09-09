@@ -17,6 +17,7 @@ from core.document_text import (
     extract_docx_images,
     extract_document_text,
     extract_standalone_image,
+    is_low_entropy_cjk_text,
     render_docx_pages,
 )
 
@@ -231,6 +232,21 @@ def test_pdf_and_docx_use_python_text_extractors():
     assert "Java" in pdf.text
     assert docx.document_type == "docx"
     assert "Java" in docx.text
+
+
+def test_low_entropy_cjk_text_requires_enough_characters():
+    """验证汉字样本不足时不会因低熵误触发视觉降级。"""
+    assert not is_low_entropy_cjk_text("年" * 99)
+
+
+def test_low_entropy_cjk_text_detects_collapsed_character_mapping():
+    """验证大量汉字塌缩成少数字符时被识别为异常文本。"""
+    assert is_low_entropy_cjk_text("年" * 99 + "绘")
+
+
+def test_low_entropy_cjk_text_accepts_normal_character_distribution():
+    """验证汉字数量充足且字符分布正常时继续使用文本解析。"""
+    assert not is_low_entropy_cjk_text("姓名教育经历工作项目技能专业学校公司" * 10)
 
 
 def test_standalone_png_is_validated_for_visual_parsing():
