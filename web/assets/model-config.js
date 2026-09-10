@@ -272,6 +272,13 @@ $('fallbackSearch').oninput = () => { renderFallbackOptions(); controls(); };
 for (const lane of ['sync', 'async']) $(lane).onchange = () => { draft[lane + 'Model'] = $(lane).value; draftChanged(); };
 function toggleFallback(open) { $('fallbackPanel').hidden = !open; $('fallbackToggle').setAttribute('aria-expanded', String(open)); if (open) $('fallbackSearch').focus(); }
 $('fallbackToggle').onclick = () => toggleFallback($('fallbackPanel').hidden);
+// 浮层不参与页面排版；点击或将焦点移至外部时收起，避免遮挡后续操作。
+document.addEventListener('pointerdown', event => {
+  if (!$('fallbackPicker').contains(event.target)) toggleFallback(false);
+});
+$('fallbackPicker').addEventListener('focusout', event => {
+  if (!$('fallbackPicker').contains(event.relatedTarget)) toggleFallback(false);
+});
 $('fallbackDone').onclick = () => { toggleFallback(false); $('fallbackToggle').focus(); };
 $('fallbackPicker').addEventListener('keydown', event => { if (event.key === 'Escape') { toggleFallback(false); $('fallbackToggle').focus(); } });
 for (const lane of ['sync', 'async', 'fallback']) $(lane + 'Add').onclick = () => {
