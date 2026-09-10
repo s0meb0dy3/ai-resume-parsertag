@@ -20,8 +20,8 @@ from typing import List, Optional
 from fastapi import APIRouter, File, Form, UploadFile
 from fastapi.responses import JSONResponse
 
+from core.model_config import get_runtime_model
 from config import (
-    ASYNC_MODEL_NAME,
     MAX_FILE_SIZE_MB,
     MAX_WORKERS,
     TASK_TTL_MINUTES,
@@ -188,7 +188,7 @@ async def async_parse_resume(
         "jobDescription":    jobDescription or "",
         "jobSensitiveWords": jobSensitiveWords or "",
     }
-    asyncio.create_task(run_parse_and_tag_task(task_id, file_bytes, filename, job_info, ASYNC_MODEL_NAME, trace_name="/api/resume/async/parse"))
+    asyncio.create_task(run_parse_and_tag_task(task_id, file_bytes, filename, job_info, get_runtime_model("async"), trace_name="/api/resume/async/parse"))
     logger.info("[任务入队] source=upload")
     return JSONResponse(content={"code": 0, "msg": "success",
                                   "data": {"taskId": task_id, "status": 0, "estimatedSeconds": 90}})
@@ -305,7 +305,7 @@ async def async_batch_parse(request: AsyncBatchRequest):
                 continue
             async with _task_lock:
                 _task_store[task_id] = TaskRecord(task_id=task_id, extra=extra)
-            asyncio.create_task(run_parse_and_tag_task(task_id, source, fn or filename, job_info, ASYNC_MODEL_NAME, trace_name="/api/resume/async/batch"))
+            asyncio.create_task(run_parse_and_tag_task(task_id, source, fn or filename, job_info, get_runtime_model("async"), trace_name="/api/resume/async/batch"))
             logger.info("[任务入队] source=batch")
             tasks.append({"filename": fn or filename, "extra": extra, "code": 0,
                           "taskId": task_id, "status": 0, "statusDesc": "待处理"})
@@ -359,7 +359,7 @@ async def async_batch_parse_only(request: AsyncBatchRequest):
                 continue
             async with _task_lock:
                 _task_store[task_id] = TaskRecord(task_id=task_id, extra=extra)
-            asyncio.create_task(run_async_parse_task(task_id, source, fn or filename, ASYNC_MODEL_NAME, trace_name="/api/resume/async/batch/parse"))
+            asyncio.create_task(run_async_parse_task(task_id, source, fn or filename, get_runtime_model("async"), trace_name="/api/resume/async/batch/parse"))
             logger.info("[任务入队] source=batch/parse")
             tasks.append({"filename": fn or filename, "extra": extra, "code": 0,
                           "taskId": task_id, "status": 0, "statusDesc": "待处理"})
@@ -399,7 +399,7 @@ async def async_batch_tag_only(request: AsyncTagBatchRequest):
             async with _task_lock:
                 _task_store[task_id] = TaskRecord(task_id=task_id, extra=item.extra)
             asyncio.create_task(run_async_tag_task(
-                task_id, item.resume.model_dump(), filename, item.resumeParseFinishTime, job_info, ASYNC_MODEL_NAME, trace_name="/api/resume/async/batch/tag"
+                task_id, item.resume.model_dump(), filename, item.resumeParseFinishTime, job_info, get_runtime_model("async"), trace_name="/api/resume/async/batch/tag"
             ))
             logger.info("[任务入队] source=batch/tag")
             tasks.append({"filename": filename, "extra": item.extra, "code": 0,
@@ -498,7 +498,7 @@ async def async_batch_parse_multiform(
                 continue
             async with _task_lock:
                 _task_store[task_id] = TaskRecord(task_id=task_id)
-            asyncio.create_task(run_parse_and_tag_task(task_id, file_bytes, filename, job_info, ASYNC_MODEL_NAME, trace_name="/api/resume/async/batch/multiform"))
+            asyncio.create_task(run_parse_and_tag_task(task_id, file_bytes, filename, job_info, get_runtime_model("async"), trace_name="/api/resume/async/batch/multiform"))
             logger.info("[任务入队] source=batch/multiform/upload")
             tasks.append({"filename": filename, "code": 0, "taskId": task_id, "status": 0, "statusDesc": "待处理"})
 
@@ -525,7 +525,7 @@ async def async_batch_parse_multiform(
                 continue
             async with _task_lock:
                 _task_store[task_id] = TaskRecord(task_id=task_id, extra=extra)
-            asyncio.create_task(run_parse_and_tag_task(task_id, source, fn or filename, job_info, ASYNC_MODEL_NAME, trace_name="/api/resume/async/batch/multiform"))
+            asyncio.create_task(run_parse_and_tag_task(task_id, source, fn or filename, job_info, get_runtime_model("async"), trace_name="/api/resume/async/batch/multiform"))
             logger.info("[任务入队] source=batch/multiform/url")
             tasks.append({"filename": fn or filename, "extra": extra, "code": 0,
                           "taskId": task_id, "status": 0, "statusDesc": "待处理"})

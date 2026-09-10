@@ -12,6 +12,7 @@ services:
       - ./uploads:/app/uploads
       - ./results:/app/results
       - ./schemas:/app/schemas
+      - ./runtime:/app/runtime
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:21804/health')"]
       interval: 30s

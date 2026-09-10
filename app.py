@@ -49,6 +49,8 @@ from api.routes_async     import router as async_router
 from api.routes_openai    import router as openai_router
 from api.routes_tags      import router as tags_router
 from api.routes_algorithm import router as algorithm_router
+from api.routes_model_config import router as model_config_router
+from core.model_config import ModelSnapshotMiddleware, get_model_store
 from api.response_schemas import HealthResponse, ModelListResponse
 
 
@@ -96,9 +98,11 @@ async def lifespan(app: FastAPI):
     # 每次轮询产生一条缺失业务 ContextVar 的重复访问日志。
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     lm.start_config_watcher()
-    fallback_str = " → ".join(FALLBACK_MODELS) if FALLBACK_MODELS else "无"
+    active_models = get_model_store().state().current
+    logger.info(f"[运行时模型配置] {active_models.model_dump()}")
+    fallback_str = " → ".join(active_models.fallbackModels) or "无"
     logger.info(
-        f"[模型配置] 默认={MODEL_NAME} | 异步={ASYNC_MODEL_NAME} | 同步={SYNC_MODEL_NAME} | "
+        f"[模型配置] 默认={MODEL_NAME} | 异步={active_models.asyncModel} | 同步={active_models.syncModel} | "
         f"备用={fallback_str} | MAX_TOKENS={MAX_TOKENS} | LLM={MODEL_SERVICE_URL}"
     )
     _cleanup_uploads()
@@ -138,6 +142,8 @@ app.include_router(async_router)
 app.include_router(openai_router)
 app.include_router(tags_router)
 app.include_router(algorithm_router)
+app.include_router(model_config_router)
+app.add_middleware(ModelSnapshotMiddleware)
 
 
 _JSON_RESPONSE_OPERATION_NAMES = {

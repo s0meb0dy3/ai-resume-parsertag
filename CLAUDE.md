@@ -122,7 +122,7 @@ docs/openapi.json         由应用导出的接口快照
 
 ## 模型和并发
 
-- 同步入口使用 `SYNC_MODEL_NAME`，异步入口使用 `ASYNC_MODEL_NAME`。
+- 同步/异步模型默认来自 `SYNC_MODEL_NAME` / `ASYNC_MODEL_NAME`；`/admin/models` 可热更新。运行时文件优先，每个请求固定配置快照；管理接口必须配置 `MODEL_ADMIN_TOKEN`。详见 `docs/模型配置管理.md`。
 - LLM 调用统一走 `core.parser._call_llm_with_fallback()`；不要在业务模块新建客户端。
 - 教育和工作年限虽然出现在正向 Prompt Schema 中，但模型固定返回空数组，最终由规则计算。
 - 只有同步解析+打标链可将内部 `skill_evidence_text` 传给打标；异步视觉链和所有

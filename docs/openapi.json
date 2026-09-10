@@ -130,6 +130,44 @@
         "title": "AddPositiveDimensionBody",
         "type": "object"
       },
+      "ApplyConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "asyncModel": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Asyncmodel",
+            "type": "string"
+          },
+          "expectedVersion": {
+            "minimum": 0.0,
+            "title": "Expectedversion",
+            "type": "integer"
+          },
+          "fallbackModels": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Fallbackmodels",
+            "type": "array"
+          },
+          "syncModel": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Syncmodel",
+            "type": "string"
+          }
+        },
+        "required": [
+          "syncModel",
+          "asyncModel",
+          "expectedVersion"
+        ],
+        "title": "ApplyConfig",
+        "type": "object"
+      },
       "AsyncBatchRequest": {
         "description": "POST /api/resume/async/batch 和 /api/resume/async/batch/parse 请求体。\n单次最多 20 份，仅支持 type=url；文件支持 PDF、DOCX、JPG、JPEG、PNG。",
         "properties": {
@@ -375,7 +413,7 @@
             "anyOf": [
               {
                 "items": {
-                  "contentMediaType": "application/octet-stream",
+                  "format": "binary",
                   "type": "string"
                 },
                 "type": "array"
@@ -448,7 +486,7 @@
       "Body_async_parse_resume_api_resume_async_parse_post": {
         "properties": {
           "file": {
-            "contentMediaType": "application/octet-stream",
+            "format": "binary",
             "title": "File",
             "type": "string"
           },
@@ -1011,6 +1049,29 @@
         "title": "HttpErrorResponse",
         "type": "object"
       },
+      "ModelConfigState": {
+        "additionalProperties": false,
+        "properties": {
+          "current": {
+            "$ref": "#/components/schemas/ModelSnapshot"
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelSelection"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "current"
+        ],
+        "title": "ModelConfigState",
+        "type": "object"
+      },
       "ModelInfo": {
         "description": "表示 OpenAI 模型列表中的单个逻辑模型。",
         "properties": {
@@ -1062,6 +1123,86 @@
           "data"
         ],
         "title": "ModelListResponse",
+        "type": "object"
+      },
+      "ModelSelection": {
+        "additionalProperties": false,
+        "properties": {
+          "asyncModel": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Asyncmodel",
+            "type": "string"
+          },
+          "fallbackModels": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Fallbackmodels",
+            "type": "array"
+          },
+          "syncModel": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Syncmodel",
+            "type": "string"
+          }
+        },
+        "required": [
+          "syncModel",
+          "asyncModel"
+        ],
+        "title": "ModelSelection",
+        "type": "object"
+      },
+      "ModelSnapshot": {
+        "additionalProperties": false,
+        "properties": {
+          "asyncModel": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Asyncmodel",
+            "type": "string"
+          },
+          "fallbackModels": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Fallbackmodels",
+            "type": "array"
+          },
+          "source": {
+            "default": "environment",
+            "title": "Source",
+            "type": "string"
+          },
+          "syncModel": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Syncmodel",
+            "type": "string"
+          },
+          "updatedAt": {
+            "default": "",
+            "title": "Updatedat",
+            "type": "string"
+          },
+          "version": {
+            "default": 0,
+            "minimum": 0.0,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "syncModel",
+          "asyncModel"
+        ],
+        "title": "ModelSnapshot",
         "type": "object"
       },
       "NegativeDimensionConfig": {
@@ -1415,6 +1556,96 @@
         "title": "PositiveTags",
         "type": "object"
       },
+      "ProbeItem": {
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "passed": {
+            "title": "Passed",
+            "type": "boolean"
+          },
+          "seconds": {
+            "title": "Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "model",
+          "passed",
+          "seconds",
+          "message"
+        ],
+        "title": "ProbeItem",
+        "type": "object"
+      },
+      "ProbeRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "asyncModel": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Asyncmodel",
+            "type": "string"
+          },
+          "fallbackModels": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Fallbackmodels",
+            "type": "array"
+          },
+          "kind": {
+            "enum": [
+              "text",
+              "vision"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "syncModel": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Syncmodel",
+            "type": "string"
+          }
+        },
+        "required": [
+          "syncModel",
+          "asyncModel",
+          "kind"
+        ],
+        "title": "ProbeRequest",
+        "type": "object"
+      },
+      "ProbeResult": {
+        "properties": {
+          "kind": {
+            "title": "Kind",
+            "type": "string"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/ProbeItem"
+            },
+            "title": "Results",
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "results"
+        ],
+        "title": "ProbeResult",
+        "type": "object"
+      },
       "Project": {
         "description": "定义单条项目经历的归属公司、项目、角色、描述和时间字段。",
         "properties": {
@@ -1511,6 +1742,20 @@
           "type"
         ],
         "title": "ResumeUrlItem",
+        "type": "object"
+      },
+      "RollbackConfig": {
+        "properties": {
+          "expectedVersion": {
+            "minimum": 0.0,
+            "title": "Expectedversion",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expectedVersion"
+        ],
+        "title": "RollbackConfig",
         "type": "object"
       },
       "SensitiveAlgorithmResponse": {
@@ -2607,13 +2852,6 @@
       },
       "ValidationError": {
         "properties": {
-          "ctx": {
-            "title": "Context",
-            "type": "object"
-          },
-          "input": {
-            "title": "Input"
-          },
           "loc": {
             "items": {
               "anyOf": [
@@ -2758,6 +2996,12 @@
         "title": "_FileInfo",
         "type": "object"
       }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "scheme": "bearer",
+        "type": "http"
+      }
     }
   },
   "info": {
@@ -2873,6 +3117,203 @@
         "summary": "Algorithm Sensitive Tag",
         "tags": [
           "算法调试"
+        ]
+      }
+    },
+    "/api/admin/models/catalog": {
+      "get": {
+        "description": "从现有网关获取可选模型；不支持列表的网关仍可手动填写 ID。",
+        "operationId": "model_catalog_api_admin_models_catalog_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Response Model Catalog Api Admin Models Catalog Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Model Catalog",
+        "tags": [
+          "模型配置"
+        ]
+      }
+    },
+    "/api/admin/models/config": {
+      "get": {
+        "description": "读取生效配置与上一版；不包含网关 URL 或密钥。",
+        "operationId": "read_config_api_admin_models_config_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelConfigState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Read Config",
+        "tags": [
+          "模型配置"
+        ]
+      },
+      "put": {
+        "description": "保存并整体应用配置，仅影响后续请求；版本不匹配返回 409。",
+        "operationId": "apply_config_api_admin_models_config_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyConfig"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelConfigState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Apply Config",
+        "tags": [
+          "模型配置"
+        ]
+      }
+    },
+    "/api/admin/models/rollback": {
+      "post": {
+        "description": "恢复上一版内容并生成新版本号，不重跑历史任务。",
+        "operationId": "rollback_config_api_admin_models_rollback_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RollbackConfig"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelConfigState"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Rollback Config",
+        "tags": [
+          "模型配置"
+        ]
+      }
+    },
+    "/api/admin/models/test": {
+      "post": {
+        "description": "逐个直接测试主备模型，不回退、不修改配置；通过不代表简历业务质量已验证。",
+        "operationId": "test_config_api_admin_models_test_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProbeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProbeResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Test Config",
+        "tags": [
+          "模型配置"
         ]
       }
     },

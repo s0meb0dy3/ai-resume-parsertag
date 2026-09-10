@@ -26,8 +26,9 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
+from core.model_config import get_runtime_model
 from config import (
-    MAX_WORKERS, SYNC_MODEL_NAME, logger, reset_current_model_name, set_current_model_name,
+    MAX_WORKERS, logger, reset_current_model_name, set_current_model_name,
     log_context, set_log_context, wrap_for_executor,
 )
 from api.response_schemas import (
@@ -78,7 +79,7 @@ def parse_sync_document_with_model(source, filename: str):
     Raises:
         Exception: PDF 打开、模型调用或结果解析失败时向上传递。
     """
-    token = set_current_model_name(SYNC_MODEL_NAME)
+    token = set_current_model_name(get_runtime_model("sync"))
     try:
         resume = parse_sync_resume_with_logging(source, filename)
         # 同步链路根 span 内部（span 活跃期）写 trace 级 input/output
@@ -102,7 +103,7 @@ def tag_sync_resume_with_model(resume: dict, job_info: dict):
     Returns:
         dict: 正向标签、风险命中、扣分和打标时间。
     """
-    token = set_current_model_name(SYNC_MODEL_NAME)
+    token = set_current_model_name(get_runtime_model("sync"))
     try:
         tag_info = run_tagging(resume, job_info, llm_call_fn=_call_llm_with_fallback)
         # 同步链路根 span 内部（span 活跃期）写 trace 级 input/output
@@ -384,7 +385,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
             _task_store[task_id] = rec
 
         if request.async_mode:
-            asyncio.create_task(run_parse_and_tag_task(task_id, source, filename or "resume.pdf", job_info, SYNC_MODEL_NAME, trace_name="/v1/chat/completions"))
+            asyncio.create_task(run_parse_and_tag_task(task_id, source, filename or "resume.pdf", job_info, get_runtime_model("sync"), trace_name="/v1/chat/completions"))
             generated_text = json.dumps(
                 {"taskId": task_id, "status": 0, "statusDesc": "待处理", "estimatedSeconds": 90},
                 ensure_ascii=False,
@@ -392,7 +393,7 @@ async def create_chat_completion(request: ChatCompletionRequest):
             logger.info(f"{model} async_mode=true taskId={task_id}")
         else:
             await run_parse_and_tag_task(
-                task_id, source, filename or "resume.pdf", job_info, SYNC_MODEL_NAME,
+                task_id, source, filename or "resume.pdf", job_info, get_runtime_model("sync"),
                 parse_fn=parse_sync_resume_for_tagging_with_logging,
                 operation_name="同步解析与打标",
                 trace_name="/v1/chat/completions",
@@ -495,7 +496,7 @@ async def sync_parse_and_tag_resumes(request: SyncBatchRequest):
             return
         async with sem:
             await run_parse_and_tag_task(
-                p["task_id"], p["source"], p["filename"], job_info, SYNC_MODEL_NAME,
+                p["task_id"], p["source"], p["filename"], job_info, get_runtime_model("sync"),
                 parse_fn=parse_sync_resume_for_tagging_with_logging,
                 operation_name="同步解析与打标",
                 trace_name="/api/resume/sync/batch",

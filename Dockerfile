@@ -15,6 +15,9 @@ COPY logger/ ./logger/
 COPY utils/ ./utils/
 COPY tag/ ./tag/
 COPY schemas/ ./schemas/
+# Tailwind 产物入库；运行镜像不安装 Node 或加载外部 CDN。
+COPY web/model-config.html ./web/model-config.html
+COPY web/assets/ ./web/assets/
 
 RUN mkdir -p uploads logs results
 

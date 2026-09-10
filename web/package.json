@@ -1,0 +1,14 @@
+{
+  "name": "resume-model-admin",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "build": "tailwindcss -i ./styles.css -o ./assets/model-config.css --minify",
+    "test": "node --test test/admin-ui.test.cjs"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "4.1.18",
+    "tailwindcss": "4.1.18",
+    "playwright": "1.58.2"
+  }
+}

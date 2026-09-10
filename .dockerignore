@@ -10,5 +10,7 @@ results/
 test/
 docs/
 localmaterial/
+runtime/
+**/node_modules/
 *.md
 .dockerignore

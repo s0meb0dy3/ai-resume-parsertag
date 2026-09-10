@@ -52,6 +52,10 @@ LLM_PREFIX_CACHE_ENABLED = os.getenv(
     "true",
 ).strip().lower() not in {"0", "false", "no", "off"}
 
+# 网关地址/密钥仍由部署管理，页面仅管理模型名称。管理令牌缺省时禁用管理 API。
+MODEL_CONFIG_FILE = os.getenv("MODEL_CONFIG_FILE", str(Path(__file__).parent / "runtime" / "model_config.json"))
+MODEL_ADMIN_TOKEN = os.getenv("MODEL_ADMIN_TOKEN", "")
+
 # 模型上下文
 def get_current_model_name() -> str:
     """读取当前请求上下文使用的模型名。

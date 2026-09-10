@@ -141,6 +141,9 @@ def _call_llm_model_once(
     messages: list,
     model_name: str,
     prompt_cache_key: str | None = None,
+    *,
+    timeout: float | None = None,
+    max_tokens: int | None = None,
 ) -> str:
     """调用单个模型，并兼容 thinking block 签名失败重试。
 
@@ -149,6 +152,8 @@ def _call_llm_model_once(
         model_name (str): 本次尝试的确切模型名。
         prompt_cache_key (str | None): 简历解析固定前缀的稳定缓存键；为空时不请求
             服务端前缀缓存路由。
+        timeout (float | None): 管理探测的单次超时；指定时关闭 SDK 自动重试。
+        max_tokens (int | None): 管理探测的输出上限；缺省保持业务配置。
 
     Returns:
         str: 模型第一个 choice 的文本内容。
@@ -159,6 +164,8 @@ def _call_llm_model_once(
         APIStatusError: 模型服务返回非成功 HTTP 状态时抛出。
         Exception: thinking 参数重试仍失败或其他 SDK 异常时抛出。
     """
+    # 管理页探测沿用真实业务参数构造，但限制超时和输出、不执行 SDK 自动重试。
+    active_client = client.with_options(timeout=timeout, max_retries=0) if timeout else client
     cache_key = (
         prompt_cache_key
         if LLM_PREFIX_CACHE_ENABLED and prompt_cache_key
@@ -176,7 +183,7 @@ def _call_llm_model_once(
             model=model_name,
             messages=messages,
             temperature=TEMPERATURE,
-            max_tokens=MAX_TOKENS,
+            max_tokens=max_tokens if max_tokens is not None else MAX_TOKENS,
             extra_body=get_thinking_disable_params(model_name),
         )
         if cache_key:
@@ -184,7 +191,7 @@ def _call_llm_model_once(
         while True:
             try:
                 record_llm_attempt(model_name)
-                resp = client.chat.completions.create(**kwargs)
+                resp = active_client.chat.completions.create(**kwargs)
                 break
             except APITimeoutError:
                 raise
@@ -310,15 +317,20 @@ def _call_llm_with_fallback(
         Exception: 所有可用模型均失败时抛出最后一个异常。
     """
     update_current_observation(input=_sanitize_llm_messages(messages))
-    primary    = get_current_model_name()
-    all_models = [primary] + FALLBACK_MODELS
+    from core.model_config import request_model_snapshot
+    snapshot = request_model_snapshot.get()
+    primary = get_current_model_name()
+    fallbacks = list(snapshot.fallbackModels) if snapshot else FALLBACK_MODELS
+    all_models = list(dict.fromkeys([primary] + fallbacks))
+    if snapshot:
+        logger.info(f"[模型选择] configVersion={snapshot.version} model={primary} fallbacks={fallbacks}")
     last_error: Exception | None = None
 
     for i, model_name in enumerate(all_models):
         if i == 0:
             logger.debug(f"[LLM] model={model_name} max_tokens={MAX_TOKENS}")
         else:
-            logger.warning(f"[LLM] 回退到备用模型 [{i}/{len(FALLBACK_MODELS)}]: {model_name}")
+            logger.warning(f"[LLM] 回退到备用模型 [{i}/{len(all_models) - 1}]: {model_name}")
         _has_next = i < len(all_models) - 1
         _next_tip = "尝试下一个备用模型" if _has_next else "已无可用模型"
         try:
