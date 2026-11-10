@@ -2,9 +2,9 @@
 
 基于 OpenAI 兼容多模态大模型的多格式简历解析与智能打标服务，支持 PDF、DOCX、JPG、JPEG、PNG，输出结构化 JSON 并自动完成正向/负向标签标注。
 
-## 简历评测网站
+## 简历解析方法评测
 
-欢迎访问我开发的[简历评测网站](https://resume-eval.peteryao.cn/)，在线体验简历评测。
+欢迎访问我开发的[简历解析方法评测网站](https://resume-eval.peteryao.cn/)，用于评测和比较不同简历解析方法的效果。
 
 ---
 
